@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getCurrentMember } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { getEmployeeScores } from "@/lib/ai/employee-recommender";
 
 /**
  * GET /api/ai/recommend?shiftId=xxx
  *
  * Returns a scored employee list for the given shift.
- * Accessible by any authenticated org member (same data they can already see).
+ * Nur fuer die Administration.
  */
 export async function GET(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Die Bewertung vergleicht alle Mitglieder der Organisation und darf
+  // deshalb nicht an Standortfreigaben vorbei laufen.
+  if (!isAdminOrAbove(member.role)) {
+    return NextResponse.json({ error: "Keine Berechtigung." }, { status: 403 });
   }
 
   const { searchParams } = request.nextUrl;

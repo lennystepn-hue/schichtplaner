@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 
 const renameSchema = z.object({
   name: z.string().min(1).max(100),
@@ -17,7 +17,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -76,7 +76,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

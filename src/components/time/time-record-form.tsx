@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { berlinDate } from "@/lib/berlin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Clock, Timer } from "lucide-react";
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
 
 type TimeRecordData = {
+  breakSeconds?: number;
   id: string;
   userId: string;
   date: string;
@@ -61,7 +63,12 @@ type CategoryData = {
   enabled: boolean;
 };
 
-export function TimeRecordForm({
+export function TimeRecordForm(props: TimeRecordFormProps) {
+  const { data: member } = useCurrentMember();
+  if (!member) return null;
+  return props.open ? <TimeEditor key={props.record?.id || "new"} {...props} /> : null;
+}
+function TimeEditor({
   open,
   onOpenChange,
   record,
@@ -71,25 +78,22 @@ export function TimeRecordForm({
   const isEdit = !!record;
   const queryClient = useQueryClient();
   const { data: currentMember } = useCurrentMember();
-  const isManager =
-    currentMember?.role === "OWNER" ||
-    currentMember?.role === "ADMIN" ||
-    currentMember?.role === "MANAGER";
-
   // Form state
-  const [userId, setUserId] = useState("");
+  const [userId, setUserId] = useState(record?.userId || currentMember?.user.id || "");
   const [date, setDate] = useState(
-    defaultDate || format(new Date(), "yyyy-MM-dd")
+    record?.date.slice(0,10) || defaultDate || berlinDate()
   );
   const [entryType, setEntryType] = useState<"MANUAL" | "MANUAL_DURATION">(
-    "MANUAL"
+    record?.type === "MANUAL_DURATION" ? "MANUAL_DURATION" : "MANUAL"
   );
-  const [timeFrom, setTimeFrom] = useState("08:00");
-  const [timeTo, setTimeTo] = useState("17:00");
-  const [durationHours, setDurationHours] = useState(0);
-  const [durationMinutes, setDurationMinutes] = useState(0);
-  const [categoryId, setCategoryId] = useState<string>("none");
-  const [comment, setComment] = useState("");
+  const [timeFrom, setTimeFrom] = useState(record?.timeFrom || "08:00");
+  const [timeTo, setTimeTo] = useState(record?.timeTo || "17:00");
+  const [durationHours, setDurationHours] = useState(record?.durationHours || 0);
+  const [durationMinutes, setDurationMinutes] = useState(record?.durationMinutes || 0);
+  const [categoryId, setCategoryId] = useState<string>(record?.categoryId || "none");
+  const [comment, setComment] = useState(record?.comment || "");
+  const [reason, setReason] = useState("");
+  const [breakMinutes, setBreakMinutes] = useState(Math.round((record?.breakSeconds || 0) / 60));
 
   // Fetch categories
   const { data: categoriesData } = useQuery<{ categories: CategoryData[] }>({
@@ -104,37 +108,6 @@ export function TimeRecordForm({
   const categories = (categoriesData?.categories ?? []).filter(
     (c) => c.enabled
   );
-
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      if (record) {
-        setUserId(record.userId);
-        setDate(record.date.slice(0, 10));
-        if (record.type === "MANUAL_DURATION") {
-          setEntryType("MANUAL_DURATION");
-          setDurationHours(record.durationHours ?? 0);
-          setDurationMinutes(record.durationMinutes ?? 0);
-        } else {
-          setEntryType("MANUAL");
-          setTimeFrom(record.timeFrom ?? "08:00");
-          setTimeTo(record.timeTo ?? "17:00");
-        }
-        setCategoryId(record.categoryId ?? "none");
-        setComment(record.comment ?? "");
-      } else {
-        setUserId(currentMember?.user?.id ?? "");
-        setDate(defaultDate || format(new Date(), "yyyy-MM-dd"));
-        setEntryType("MANUAL");
-        setTimeFrom("08:00");
-        setTimeTo("17:00");
-        setDurationHours(0);
-        setDurationMinutes(0);
-        setCategoryId("none");
-        setComment("");
-      }
-    }
-  }, [open, record, currentMember, defaultDate]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -163,7 +136,7 @@ export function TimeRecordForm({
       const res = await fetch("/api/time", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, breakMinutes }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -185,7 +158,7 @@ export function TimeRecordForm({
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!record) return;
-      const body: Record<string, unknown> = { date };
+      const body: Record<string, unknown> = { date, reason, breakMinutes };
       if (entryType === "MANUAL") {
         body.timeFrom = timeFrom;
         body.timeTo = timeTo;
@@ -212,7 +185,7 @@ export function TimeRecordForm({
       return res.json();
     },
     onSuccess: () => {
-      toast.success("Zeiterfassung aktualisiert");
+      toast.success("Korrektur zur Freigabe eingereicht");
       queryClient.invalidateQueries({ queryKey: ["time-records"] });
       onOpenChange(false);
     },
@@ -225,8 +198,8 @@ export function TimeRecordForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (entryType === "MANUAL" && timeFrom >= timeTo) {
-      toast.error("Startzeit muss vor Endzeit liegen");
+    if (entryType === "MANUAL" && timeFrom === timeTo) {
+      toast.error("Beginn und Ende müssen unterschiedlich sein");
       return;
     }
     if (
@@ -261,7 +234,7 @@ export function TimeRecordForm({
 
           <div className="mt-4 space-y-4">
             {/* Employee select (only for managers in create mode) */}
-            {!isEdit && isManager && employees.length > 0 && (
+            {!isEdit && employees.length > 1 && (
               <div className="space-y-1.5">
                 <Label>Mitarbeiter</Label>
                 <Select value={userId} onValueChange={setUserId}>
@@ -298,6 +271,7 @@ export function TimeRecordForm({
                 <button
                   type="button"
                   onClick={() => setEntryType("MANUAL")}
+                  disabled={!!record}
                   className={cn(
                     "flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors flex-1",
                     entryType === "MANUAL"
@@ -311,6 +285,7 @@ export function TimeRecordForm({
                 <button
                   type="button"
                   onClick={() => setEntryType("MANUAL_DURATION")}
+                  disabled={!!record}
                   className={cn(
                     "flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors flex-1",
                     entryType === "MANUAL_DURATION"
@@ -404,6 +379,8 @@ export function TimeRecordForm({
             )}
 
             {/* Comment */}
+            <label className="block text-sm">Pause in Minuten<Input type="number" min={0} max={1440} value={breakMinutes} onChange={e => setBreakMinutes(Number(e.target.value))} required /></label>
+            {isEdit && <><label className="block text-sm">Begründung der Korrektur<Textarea value={reason} onChange={e => setReason(e.target.value)} minLength={5} maxLength={1000} required /></label><p className="text-xs text-muted-foreground">Die Änderung wird erst nach Bestätigung durch die Administration wirksam.</p></>}
             <div className="space-y-1.5">
               <Label htmlFor="record-comment">Kommentar (optional)</Label>
               <Textarea

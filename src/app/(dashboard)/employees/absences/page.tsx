@@ -5,6 +5,7 @@ import { CalendarDays, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AbsenceList } from "@/components/employees/absence-list";
 import { AbsenceCalendar } from "@/components/employees/absence-calendar";
+import { Availability } from "@/components/workforce/availability";
 
 type ViewMode = "list" | "calendar";
 
@@ -36,6 +37,7 @@ export default function AbsencesPage() {
       </div>
 
       {viewMode === "list" ? <AbsenceList /> : <AbsenceCalendar />}
+      <Availability />
     </div>
   );
 }

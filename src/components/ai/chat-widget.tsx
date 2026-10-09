@@ -140,7 +140,7 @@ export function ChatWidget() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95"
+          className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary transition-all hover:scale-105 active:scale-95"
           aria-label="KI-Chat oeffnen"
         >
           <Sparkles className="size-6" />
@@ -149,9 +149,9 @@ export function ChatWidget() {
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col w-[400px] h-[520px] rounded-2xl bg-white dark:bg-slate-900 border shadow-2xl overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col w-[400px] h-[520px] rounded-2xl bg-card border shadow-2xl overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white">
+          <div className="flex items-center justify-between px-4 py-3 bg-primary text-white">
             <div className="flex items-center gap-2">
               <Sparkles className="size-5" />
               <span className="font-semibold text-sm">KI-Assistent</span>
@@ -159,14 +159,14 @@ export function ChatWidget() {
             <div className="flex items-center gap-1">
               <Link
                 href="/ai/chat"
-                className="rounded-md p-1 hover:bg-indigo-500 transition-colors"
+                className="rounded-md p-1 hover:bg-primary transition-colors"
                 title="Vollbild oeffnen"
               >
                 <Maximize2 className="size-4" />
               </Link>
               <button
                 onClick={() => setIsOpen(false)}
-                className="rounded-md p-1 hover:bg-indigo-500 transition-colors"
+                className="rounded-md p-1 hover:bg-primary transition-colors"
               >
                 <X className="size-4" />
               </button>
@@ -186,8 +186,8 @@ export function ChatWidget() {
                 onKeyDown={handleKeyDown}
                 placeholder="Nachricht eingeben..."
                 className={cn(
-                  "flex-1 resize-none rounded-lg border bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm",
-                  "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500",
+                  "flex-1 resize-none rounded-lg border bg-muted px-3 py-2 text-sm",
+                  "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
                   "min-h-[38px] max-h-[100px]"
                 )}
                 rows={1}

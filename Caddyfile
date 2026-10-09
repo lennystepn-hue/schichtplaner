@@ -1,4 +1,4 @@
-{$DOMAIN:localhost} {
+localhost, {$DOMAIN:localhost} {
     reverse_proxy app:3000
 
     # WebSocket upgrade for Socket.io

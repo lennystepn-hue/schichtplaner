@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { isAIFeatureEnabled } from "@/lib/ai/client";
 import { generateSmartBriefing } from "@/lib/ai/briefing-generator";
 
@@ -18,9 +18,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json(
-      { error: "Nur Manager koennen KI-Briefings generieren" },
+      { error: "Nur die Administration kann KI-Briefings generieren" },
       { status: 403 }
     );
   }

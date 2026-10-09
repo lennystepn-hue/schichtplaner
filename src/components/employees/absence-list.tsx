@@ -15,6 +15,7 @@ import {
   Search,
   Filter,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,9 @@ import type { AbsenceData, EmployeeOption } from "./absence-form";
 
 type AbsenceResponse = {
   absences: AbsenceData[];
+  canManage: boolean;
+  /** Eigene Person plus zugeordnete Personen, fuer die Eintraege erlaubt sind. */
+  people: EmployeeOption[];
   counts: {
     all: number;
     pending: number;
@@ -75,8 +79,6 @@ function formatDateRange(from: string, to: string): string {
 export function AbsenceList() {
   const queryClient = useQueryClient();
   const { data: currentMember } = useCurrentMember();
-  const isAdmin =
-    currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
 
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [search, setSearch] = useState("");
@@ -114,22 +116,8 @@ export function AbsenceList() {
     );
   }, [absences, search]);
 
-  // Employee options for the form
-  const employeeOptions: EmployeeOption[] = useMemo(() => {
-    const uniqueUsers = new Map<string, EmployeeOption>();
-    for (const a of absences) {
-      if (!uniqueUsers.has(a.user.id)) {
-        uniqueUsers.set(a.user.id, {
-          userId: a.user.id,
-          firstName: a.user.firstName,
-          lastName: a.user.lastName,
-        });
-      }
-    }
-    return Array.from(uniqueUsers.values()).sort((a, b) =>
-      a.lastName.localeCompare(b.lastName)
-    );
-  }, [absences]);
+  // Personen fuer das Formular - vom Server nach Freigabe begrenzt
+  const employeeOptions: EmployeeOption[] = data?.people ?? [];
 
   // Approve mutation
   const approveMutation = useMutation({
@@ -179,22 +167,19 @@ export function AbsenceList() {
       const res = await fetch(`/api/absences/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Fehler beim Loeschen");
+        throw new Error(d.error || "Fehler beim Löschen");
       }
       return res.json();
     },
     onSuccess: () => {
-      toast.success("Abwesenheit geloescht");
+      toast.success("Abwesenheit gelöscht");
       queryClient.invalidateQueries({ queryKey: ["absences"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
 
-  function handleDelete(id: string) {
-    if (confirm("Abwesenheit wirklich loeschen?")) {
-      deleteMutation.mutate(id);
-    }
-  }
+  const LOESCH_HINWEIS =
+    "Der Eintrag wird entfernt. Ein genehmigter Zeitraum gilt danach nicht mehr als Abwesenheit.";
 
   function handleEdit(absence: AbsenceData) {
     setEditingAbsence(absence);
@@ -206,7 +191,7 @@ export function AbsenceList() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Abwesenheiten</h1>
+          <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Abwesenheiten</h1>
           <p className="text-sm text-muted-foreground">
             Abwesenheitsanfragen verwalten und genehmigen
           </p>
@@ -246,18 +231,18 @@ export function AbsenceList() {
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                    ? "bg-accent text-primary dark:text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
                 {tab.key === "pending" && (
-                  <Clock className="size-3.5 text-yellow-500" />
+                  <Clock className="size-3.5 text-warn" />
                 )}
                 {tab.key === "approved" && (
-                  <Check className="size-3.5 text-green-500" />
+                  <Check className="size-3.5 text-ok" />
                 )}
                 {tab.key === "declined" && (
-                  <X className="size-3.5 text-red-500" />
+                  <X className="size-3.5 text-destructive" />
                 )}
                 {tab.key === "all" && (
                   <Filter className="size-3.5" />
@@ -289,7 +274,7 @@ export function AbsenceList() {
           <p className="text-lg font-medium">Keine Abwesenheiten</p>
           <p className="text-sm text-muted-foreground mt-1">
             {search
-              ? "Keine Ergebnisse fuer die Suche."
+              ? "Keine Ergebnisse für die Suche."
               : "Noch keine Abwesenheitsanfragen vorhanden."}
           </p>
         </Card>
@@ -314,7 +299,7 @@ export function AbsenceList() {
                 {filteredAbsences.map((absence) => {
                   const days = calculateDays(absence.dateFrom, absence.dateTo);
                   const canDelete =
-                    isAdmin ||
+                    !!absence.canDecide ||
                     (absence.userId === currentMember?.user.id &&
                       absence.status === "PENDING");
 
@@ -354,7 +339,7 @@ export function AbsenceList() {
                       <TableCell className="text-right">
                         <div className="flex items-center gap-1 justify-end">
                           {/* Quick approve/decline for admins on pending */}
-                          {isAdmin && absence.status === "PENDING" && (
+                          {absence.canDecide && absence.status === "PENDING" && (
                             <>
                               <Button
                                 variant="ghost"
@@ -363,7 +348,7 @@ export function AbsenceList() {
                                 disabled={approveMutation.isPending}
                                 title="Genehmigen"
                               >
-                                <Check className="size-3.5 text-green-500" />
+                                <Check className="size-3.5 text-ok" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -372,28 +357,37 @@ export function AbsenceList() {
                                 disabled={declineMutation.isPending}
                                 title="Ablehnen"
                               >
-                                <X className="size-3.5 text-red-500" />
+                                <X className="size-3.5 text-destructive" />
                               </Button>
                             </>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => handleEdit(absence)}
-                            title="Bearbeiten"
-                          >
-                            <Pencil className="size-3" />
-                          </Button>
                           {canDelete && (
                             <Button
                               variant="ghost"
                               size="icon-xs"
-                              onClick={() => handleDelete(absence.id)}
+                              onClick={() => handleEdit(absence)}
+                              title="Bearbeiten"
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <ConfirmDialog
+                              title="Abwesenheit löschen"
+                              description={LOESCH_HINWEIS}
+                              confirmLabel="Löschen"
                               disabled={deleteMutation.isPending}
-                              title="Loeschen"
+                              onConfirm={() => deleteMutation.mutate(absence.id)}
+                            >
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              disabled={deleteMutation.isPending}
+                              title="Löschen"
                             >
                               <Trash2 className="size-3 text-destructive" />
                             </Button>
+                            </ConfirmDialog>
                           )}
                         </div>
                       </TableCell>
@@ -409,7 +403,7 @@ export function AbsenceList() {
             {filteredAbsences.map((absence) => {
               const days = calculateDays(absence.dateFrom, absence.dateTo);
               const canDelete =
-                isAdmin ||
+                !!absence.canDecide ||
                 (absence.userId === currentMember?.user.id &&
                   absence.status === "PENDING");
 
@@ -450,39 +444,45 @@ export function AbsenceList() {
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      {isAdmin && absence.status === "PENDING" && (
+                      {absence.canDecide && absence.status === "PENDING" && (
                         <>
                           <Button
                             variant="ghost"
                             size="icon-xs"
                             onClick={() => approveMutation.mutate(absence.id)}
                           >
-                            <Check className="size-3.5 text-green-500" />
+                            <Check className="size-3.5 text-ok" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon-xs"
                             onClick={() => declineMutation.mutate(absence.id)}
                           >
-                            <X className="size-3.5 text-red-500" />
+                            <X className="size-3.5 text-destructive" />
                           </Button>
                         </>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => handleEdit(absence)}
-                      >
-                        <Pencil className="size-3" />
-                      </Button>
                       {canDelete && (
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          onClick={() => handleDelete(absence.id)}
+                          onClick={() => handleEdit(absence)}
+                          title="Bearbeiten"
                         >
-                          <Trash2 className="size-3 text-destructive" />
+                          <Pencil className="size-3" />
                         </Button>
+                      )}
+                      {canDelete && (
+                        <ConfirmDialog
+                          title="Abwesenheit löschen"
+                          description={LOESCH_HINWEIS}
+                          confirmLabel="Löschen"
+                          onConfirm={() => deleteMutation.mutate(absence.id)}
+                        >
+                          <Button variant="ghost" size="icon-xs" title="Löschen">
+                            <Trash2 className="size-3 text-destructive" />
+                          </Button>
+                        </ConfirmDialog>
                       )}
                     </div>
                   </div>

@@ -13,6 +13,8 @@ interface EmployeeGridProps {
   weekNumber: number;
   year: number;
   weekDates: Date[];
+  /** Standort des Plans; ohne Angabe die zusammengefuehrte Sicht. */
+  standort?: string | null;
 }
 
 type EmployeeRow = {
@@ -48,11 +50,11 @@ function shiftDurationHours(shift: ShiftData): number {
  * Rows = employees, Columns = Mo-So.
  * Each cell shows the employee's shift(s) for that day.
  */
-export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps) {
+export function EmployeeGrid({ weekNumber, year, weekDates, standort }: EmployeeGridProps) {
   const { data, isLoading } = useQuery<{ schedule: ScheduleData }>({
-    queryKey: ["schedule", weekNumber, year],
+    queryKey: ["schedule", weekNumber, year, standort ?? "alle"],
     queryFn: async () => {
-      const res = await fetch(`/api/schedules?kw=${weekNumber}&year=${year}`);
+      const res = await fetch(`/api/schedules?kw=${weekNumber}&year=${year}${standort ? "&standort=" + encodeURIComponent(standort) : ""}`);
       if (!res.ok) throw new Error("Fehler beim Laden der Schichten");
       return res.json();
     },
@@ -98,10 +100,10 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="akro-panel overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-muted/30">
+          <tr className="akro-panel-kopf">
             <th className="border-r px-3 py-2 text-left text-xs font-semibold text-muted-foreground w-44">
               Mitarbeiter
             </th>
@@ -112,7 +114,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                   key={idx}
                   className={cn(
                     "border-r px-3 py-2 text-center text-xs font-semibold min-w-[100px]",
-                    today && "bg-primary/10 text-primary"
+                    today && "bg-[var(--flaeche-heute)] text-primary"
                   )}
                 >
                   <div>{dayNames[idx]}</div>
@@ -165,6 +167,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                         {dayShifts.map((shift) => (
                           <div
                             key={shift.id}
+                            title={shift.branch?.name}
                             className="text-[11px] rounded px-1.5 py-0.5 inline-block"
                             style={{
                               backgroundColor: shift.division?.color
@@ -174,6 +177,10 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                             }}
                           >
                             {shift.shiftFrom}-{shift.shiftTo}
+                            {/* In der zusammengefuehrten Sicht steht der Standort dabei. */}
+                            {!standort && shift.branch && (
+                              <span className="block max-w-[110px] truncate text-[10px] text-muted-foreground">{shift.branch.name}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -198,8 +205,8 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
 
 function EmployeeGridSkeleton() {
   return (
-    <div className="rounded-lg border overflow-hidden">
-      <div className="bg-muted/30 px-3 py-2 flex gap-4">
+    <div className="akro-panel overflow-hidden">
+      <div className="akro-panel-kopf px-3 py-2 flex gap-4">
         <Skeleton className="h-4 w-32" />
         {Array.from({ length: 7 }).map((_, i) => (
           <Skeleton key={i} className="h-4 w-16" />

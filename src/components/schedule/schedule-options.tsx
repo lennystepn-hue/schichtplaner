@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -79,7 +79,7 @@ export function ScheduleOptions({
         <Badge variant={schedule.isPublic ? "default" : "secondary"} className="gap-1.5">
           {schedule.isPublic ? (
             <>
-              <span className="size-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="size-1.5 rounded-full bg-ok animate-pulse" />
               Veroeffentlicht
             </>
           ) : (
@@ -124,7 +124,7 @@ export function ScheduleOptions({
 
 // ─── Visibility Toggle ─────────────────────────────────────────────
 
-function VisibilityToggle({
+export function VisibilityToggle({
   scheduleId,
   isPublic,
 }: {
@@ -157,7 +157,7 @@ function VisibilityToggle({
         <Button variant="outline" size="sm" className="gap-1.5">
           {isPublic ? (
             <>
-              <span className="size-1.5 rounded-full bg-green-500" />
+              <span className="size-1.5 rounded-full bg-ok" />
               Veroeffentlicht
             </>
           ) : (
@@ -197,7 +197,7 @@ function VisibilityToggle({
 
 // ─── Division Filter ────────────────────────────────────────────────
 
-function DivisionFilter({
+export function DivisionFilter({
   scheduleId,
   divisionFilter,
   onDivisionFilterChange,
@@ -270,7 +270,7 @@ function DivisionFilter({
 
 // ─── Options Menu ───────────────────────────────────────────────────
 
-function OptionsMenu({
+export function OptionsMenu({
   scheduleId,
   settingsLayout,
   showTitle,
@@ -381,7 +381,7 @@ function OptionsMenu({
 
 // ─── Briefing Button + Sheet ────────────────────────────────────────
 
-function BriefingButton({
+export function BriefingButton({
   scheduleId,
   isManager,
 }: {
@@ -408,14 +408,14 @@ function BriefingButton({
   const briefing = data?.briefing ?? null;
   const hasBriefing = !!briefing;
 
-  // Sync text when briefing loads or sheet opens
-  useEffect(() => {
-    if (open) {
+  function changeBriefingOpen(next: boolean) {
+    if (next) {
       const t = briefing?.text ?? "";
       setText(t);
       setInitialText(t);
     }
-  }, [open, briefing]);
+    setOpen(next);
+  }
 
   // Auto-resize textarea
   const handleTextChange = useCallback(
@@ -477,12 +477,12 @@ function BriefingButton({
   const isPending = saveMutation.isPending || deleteMutation.isPending;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={changeBriefingOpen}>
       <SheetTrigger asChild>
         <Button
           variant="outline"
           size="sm"
-          className={cn("gap-1.5", hasBriefing && "border-blue-300 text-blue-600")}
+          className={cn("gap-1.5", hasBriefing && "border-blue-300 text-[var(--brand)]")}
         >
           <FileText className="size-3.5" />
           Briefing
@@ -569,7 +569,7 @@ function BriefingButton({
 
 // ─── AI Briefing Button ─────────────────────────────────────────────
 
-function AiBriefingButton({ scheduleId }: { scheduleId: string }) {
+export function AiBriefingButton({ scheduleId }: { scheduleId: string }) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
@@ -610,7 +610,7 @@ function AiBriefingButton({ scheduleId }: { scheduleId: string }) {
       size="sm"
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
-      className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-950"
+      className="gap-1.5 border-primary/30 text-primary hover:bg-accent"
     >
       {mutation.isPending ? (
         <Loader2 className="size-3.5 animate-spin" />

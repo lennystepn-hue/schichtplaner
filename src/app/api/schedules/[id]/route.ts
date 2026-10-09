@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { api, body, serial, ApiError } from "@/lib/api";
+import { assertCan, branchHolders, requireAccess } from "@/lib/access";
+import { notify } from "@/lib/planning";
+import { emitToBranch } from "@/lib/emit";
 
 const updateScheduleSchema = z.object({
   isPublic: z.boolean().optional(),
@@ -10,67 +11,34 @@ const updateScheduleSchema = z.object({
   showPauses: z.boolean().optional(),
 });
 
-interface RouteContext {
-  params: Promise<{ id: string }>;
-}
-
 /**
- * PATCH /api/schedules/:id
- *
- * Update schedule settings (isPublic, settingsLayout, showTitle, showPauses).
- * Manager+ only.
+ * Veroeffentlichen braucht "Dienstplan veroeffentlichen", die Darstellung
+ * "Schichten bearbeiten" - jeweils am Standort dieses Plans.
  */
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { id } = await context.params;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = updateScheduleSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  // Verify schedule exists and belongs to member's org
-  const existing = await db.schedule.findFirst({
-    where: { id, deletedAt: null },
-  });
-
-  if (!existing || existing.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  const schedule = await db.schedule.update({
-    where: { id },
-    data: parsed.data,
-  });
-
-  return NextResponse.json({
-    schedule: {
-      id: schedule.id,
-      isPublic: schedule.isPublic,
-      settingsLayout: schedule.settingsLayout,
-      showTitle: schedule.showTitle,
-      showPauses: schedule.showPauses,
-    },
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { id } = await context.params;
+    const data = await body(request, updateScheduleSchema);
+    const result = await serial(async tx => {
+      const existing = await tx.schedule.findFirst({ where: { id, organizationId: a.orgId, deletedAt: null }, include: { branch: { select: { name: true } }, shifts: { where: { deletedAt: null }, select: { bookings: { select: { userId: true } } } } } });
+      if (!existing) throw new ApiError("Schichtplan nicht gefunden.", 404);
+      if (data.isPublic !== undefined) assertCan(a, "PUBLISH_SCHEDULE", existing.branchId);
+      const { isPublic: _public, ...display } = data;
+      void _public;
+      if (Object.keys(display).length) assertCan(a, "EDIT_SHIFTS", existing.branchId);
+      const schedule = await tx.schedule.update({ where: { id }, data });
+      const booked = existing.shifts.flatMap(s => s.bookings.map(b => b.userId));
+      if (data.isPublic !== undefined && data.isPublic !== existing.isPublic) {
+        // Wer den Plan sehen oder Schichten anfragen darf, plus alle Eingeteilten.
+        const audience = [...await branchHolders(tx, a.orgId, existing.branchId, ["VIEW_SCHEDULE", "REQUEST_SHIFTS"], false), ...booked];
+        const where = existing.branch ? existing.branch.name + ", " : "";
+        await notify(tx, a.orgId, a.userId, audience, schedule.isPublic ? "Dienstplan veröffentlicht" : "Dienstplan zurückgezogen", where + "KW " + schedule.weekNumber + "/" + schedule.year + (schedule.isPublic ? " ist jetzt verfügbar." : " wird überarbeitet."));
+      }
+      return { schedule, booked };
+    });
+    emitToBranch(a.orgId, result.schedule.branchId, "schedule:updated", result.booked);
+    const s = result.schedule;
+    return { schedule: { id: s.id, isPublic: s.isPublic, settingsLayout: s.settingsLayout, showTitle: s.showTitle, showPauses: s.showPauses } };
   });
 }

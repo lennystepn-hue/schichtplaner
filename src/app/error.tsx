@@ -14,11 +14,11 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="mx-auto max-w-md text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 dark:bg-destructive/20">
           <svg
-            className="h-8 w-8 text-red-600 dark:text-red-400"
+            className="h-8 w-8 text-destructive dark:text-destructive"
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={1.5}
@@ -31,20 +31,20 @@ export default function Error({
             />
           </svg>
         </div>
-        <h2 className="mt-4 text-2xl font-semibold text-slate-900 dark:text-slate-100">
+        <h2 className="mt-4 text-2xl font-semibold text-foreground">
           Etwas ist schiefgelaufen
         </h2>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">
+        <p className="mt-2 text-muted-foreground">
           Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.
         </p>
         {error.digest && (
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Fehler-ID: {error.digest}
           </p>
         )}
         <button
           onClick={reset}
-          className="mt-8 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+          className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-primary/90"
         >
           Erneut versuchen
         </button>

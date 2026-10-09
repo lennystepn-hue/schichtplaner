@@ -1,355 +1,94 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { api, body, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { assertCan, can, requireAccess, type Access } from "@/lib/access";
 import { emitToSchedule } from "@/lib/emit";
 
-// ---------------------------------------------------------------------------
-// GET /api/live?scheduleId=xxx — Get current live session for a schedule
-// ---------------------------------------------------------------------------
-
-export async function GET(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const scheduleId = request.nextUrl.searchParams.get("scheduleId");
-  if (!scheduleId) {
-    return NextResponse.json(
-      { error: "Missing scheduleId parameter" },
-      { status: 400 }
-    );
-  }
-
-  // Verify schedule belongs to user's org
-  const schedule = await db.schedule.findFirst({
-    where: {
-      id: scheduleId,
-      organizationId: member.organizationId,
-      deletedAt: null,
-    },
-  });
-
-  if (!schedule) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  const session = await db.liveSession.findUnique({
-    where: { scheduleId },
-    include: {
-      days: { orderBy: { dayOfWeek: "asc" } },
-      logs: {
-        orderBy: { loggedAt: "desc" },
-        take: 50,
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  return NextResponse.json({ session });
+/** Protokolle mit Namen nur fuer die Planung des Standorts. */
+function sessionInclude(withLogs: boolean) {
+  return {
+    days: { orderBy: { dayOfWeek: "asc" as const } },
+    ...(withLogs ? { logs: { orderBy: { loggedAt: "desc" as const }, take: 50, include: { user: { select: { id: true, firstName: true, lastName: true } } } } } : {}),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// POST /api/live — Start live mode for a schedule
-// ---------------------------------------------------------------------------
-
-const startSchema = z.object({
-  scheduleId: z.string().min(1),
-});
-
-export async function POST(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json(
-      { error: "Nur Manager koennen den Live-Modus starten" },
-      { status: 403 }
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = startSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const { scheduleId } = parsed.data;
-
-  // Verify schedule belongs to user's org
-  const schedule = await db.schedule.findFirst({
-    where: {
-      id: scheduleId,
-      organizationId: member.organizationId,
-      deletedAt: null,
-    },
-  });
-
-  if (!schedule) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  // Check if already active
-  const existing = await db.liveSession.findUnique({
-    where: { scheduleId },
-  });
-
-  if (existing?.isActive) {
-    return NextResponse.json(
-      { error: "Live-Modus ist bereits aktiv" },
-      { status: 409 }
-    );
-  }
-
-  // If there's an old inactive session, delete it first to allow re-creation
-  if (existing && !existing.isActive) {
-    await db.liveSession.delete({ where: { id: existing.id } });
-  }
-
-  // Create live session with all 7 days enabled
-  const session = await db.liveSession.create({
-    data: {
-      scheduleId,
-      isActive: true,
-      days: {
-        create: Array.from({ length: 7 }, (_, i) => ({
-          dayOfWeek: i + 1, // 1=Mon .. 7=Sun
-          enabled: true,
-        })),
-      },
-    },
-    include: {
-      days: { orderBy: { dayOfWeek: "asc" } },
-      logs: {
-        orderBy: { loggedAt: "desc" },
-        take: 50,
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  // Broadcast via socket
-  emitToSchedule(scheduleId, "live:started", {
-    scheduleId,
-    session,
-  });
-
-  return NextResponse.json({ session }, { status: 201 });
+async function scheduleFor(a: Access, scheduleId: string) {
+  const schedule = await db.schedule.findFirst({ where: { id: scheduleId, organizationId: a.orgId, deletedAt: null } });
+  if (!schedule) throw new ApiError("Schichtplan nicht gefunden.", 404);
+  return schedule;
 }
 
-// ---------------------------------------------------------------------------
-// PATCH /api/live?id=xxx — Update live session (toggle days, settings)
-// ---------------------------------------------------------------------------
+async function sessionFor(a: Access, id: string) {
+  const session = await db.liveSession.findUnique({ where: { id }, include: { schedule: true } });
+  if (!session || session.schedule.organizationId !== a.orgId || session.schedule.deletedAt) throw new ApiError("Live-Session nicht gefunden.", 404);
+  assertCan(a, "EDIT_SHIFTS", session.schedule.branchId);
+  return session;
+}
+
+// GET /api/live?scheduleId=... - Status der Live-Sitzung
+export async function GET(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const scheduleId = new URL(request.url).searchParams.get("scheduleId");
+    if (!scheduleId) throw new ApiError("scheduleId fehlt.");
+    const schedule = await scheduleFor(a, scheduleId);
+    const planner = can(a, "VIEW_SCHEDULE", schedule.branchId) && (a.isAdmin || a.role === "MANAGER");
+    if (!planner && !(schedule.isPublic && can(a, "REQUEST_SHIFTS", schedule.branchId))) throw new ApiError("Schichtplan nicht gefunden.", 404);
+    return { session: await db.liveSession.findUnique({ where: { scheduleId }, include: sessionInclude(planner) }) };
+  });
+}
+
+// POST /api/live - Live-Modus starten
+export async function POST(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { scheduleId } = await body(request, z.object({ scheduleId: z.string().min(1) }));
+    const schedule = await scheduleFor(a, scheduleId);
+    assertCan(a, "EDIT_SHIFTS", schedule.branchId, "Nur die Planung dieses Standorts kann den Live-Modus starten.");
+    const existing = await db.liveSession.findUnique({ where: { scheduleId } });
+    if (existing?.isActive) throw new ApiError("Live-Modus ist bereits aktiv", 409);
+    if (existing) await db.liveSession.delete({ where: { id: existing.id } });
+    const session = await db.liveSession.create({
+      data: { scheduleId, isActive: true, days: { create: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i + 1, enabled: true })) } },
+      include: sessionInclude(true),
+    });
+    emitToSchedule(scheduleId, "live:started");
+    return Response.json({ session }, { status: 201 });
+  });
+}
 
 const patchSchema = z.object({
-  days: z
-    .array(
-      z.object({
-        dayOfWeek: z.number().min(1).max(7),
-        enabled: z.boolean(),
-      })
-    )
-    .optional(),
+  days: z.array(z.object({ dayOfWeek: z.number().min(1).max(7), enabled: z.boolean() })).optional(),
   autoStop: z.boolean().optional(),
   allowExceeds: z.boolean().optional(),
   bookRequests: z.boolean().optional(),
   deadline: z.string().nullable().optional(),
 });
 
-export async function PATCH(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json(
-      { error: "Nur Manager koennen den Live-Modus aendern" },
-      { status: 403 }
-    );
-  }
-
-  const sessionId = request.nextUrl.searchParams.get("id");
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "Missing id parameter" },
-      { status: 400 }
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  // Verify session exists and belongs to org
-  const session = await db.liveSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
+// PATCH /api/live?id=... - Tage und Einstellungen aendern
+export async function PATCH(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) throw new ApiError("id fehlt.");
+    const session = await sessionFor(a, id);
+    const { days, deadline, ...settings } = await body(request, patchSchema);
+    await db.liveSession.update({ where: { id }, data: { ...settings, ...(deadline !== undefined ? { deadline: deadline ? new Date(deadline) : null } : {}) } });
+    for (const day of days ?? []) await db.liveDay.updateMany({ where: { liveSessionId: id, dayOfWeek: day.dayOfWeek }, data: { enabled: day.enabled } });
+    emitToSchedule(session.scheduleId, "live:updated");
+    return { session: await db.liveSession.findUnique({ where: { id }, include: sessionInclude(true) }) };
   });
-
-  if (!session || session.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Live-Session nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  const { days, autoStop, allowExceeds, bookRequests, deadline } = parsed.data;
-
-  // Update session settings
-  const updateData: Record<string, unknown> = {};
-  if (autoStop !== undefined) updateData.autoStop = autoStop;
-  if (allowExceeds !== undefined) updateData.allowExceeds = allowExceeds;
-  if (bookRequests !== undefined) updateData.bookRequests = bookRequests;
-  if (deadline !== undefined) {
-    updateData.deadline = deadline ? new Date(deadline) : null;
-  }
-
-  if (Object.keys(updateData).length > 0) {
-    await db.liveSession.update({
-      where: { id: sessionId },
-      data: updateData,
-    });
-  }
-
-  // Update day toggles
-  if (days && days.length > 0) {
-    for (const day of days) {
-      await db.liveDay.updateMany({
-        where: { liveSessionId: sessionId, dayOfWeek: day.dayOfWeek },
-        data: { enabled: day.enabled },
-      });
-    }
-  }
-
-  // Fetch updated session
-  const updated = await db.liveSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      days: { orderBy: { dayOfWeek: "asc" } },
-      logs: {
-        orderBy: { loggedAt: "desc" },
-        take: 50,
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  // Broadcast update
-  emitToSchedule(session.scheduleId, "live:updated", {
-    scheduleId: session.scheduleId,
-    session: updated,
-  });
-
-  return NextResponse.json({ session: updated });
 }
 
-// ---------------------------------------------------------------------------
-// DELETE /api/live?id=xxx — Stop live mode
-// ---------------------------------------------------------------------------
-
-export async function DELETE(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json(
-      { error: "Nur Manager koennen den Live-Modus stoppen" },
-      { status: 403 }
-    );
-  }
-
-  const sessionId = request.nextUrl.searchParams.get("id");
-  if (!sessionId) {
-    return NextResponse.json(
-      { error: "Missing id parameter" },
-      { status: 400 }
-    );
-  }
-
-  // Verify session exists and belongs to org
-  const session = await db.liveSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
+// DELETE /api/live?id=... - Live-Modus beenden
+export async function DELETE(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const id = new URL(request.url).searchParams.get("id");
+    if (!id) throw new ApiError("id fehlt.");
+    const session = await sessionFor(a, id);
+    await db.liveSession.update({ where: { id }, data: { isActive: false } });
+    emitToSchedule(session.scheduleId, "live:stopped");
+    return { success: true };
   });
-
-  if (!session || session.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Live-Session nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  // Deactivate the session
-  await db.liveSession.update({
-    where: { id: sessionId },
-    data: { isActive: false },
-  });
-
-  // Broadcast via socket
-  emitToSchedule(session.scheduleId, "live:stopped", {
-    scheduleId: session.scheduleId,
-    sessionId,
-  });
-
-  return NextResponse.json({ success: true });
 }

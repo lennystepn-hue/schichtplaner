@@ -1,463 +1,56 @@
 "use client";
-
-import { useState, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { json, useAction, selectClass, ErrorMessage } from "@/components/workforce/client";
 import type { ShiftData, DivisionOption } from "@/types/schedule";
 
-interface ShiftFormProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  scheduleId: string;
-  /** Pre-selected day of week (1-7) for create mode */
-  defaultDayOfWeek?: number;
-  /** Shift to edit (if editing) */
-  shift?: ShiftData | null;
-}
+type Props = { open: boolean; onOpenChange: (value: boolean) => void; scheduleId: string; branchId: string | null; defaultDayOfWeek?: number; shift?: ShiftData | null };
+type BranchOption = { id: string; name: string; isActive: boolean; positions: string[]; customerId: string | null; customer: { name: string } | null };
 
-const DAY_CHECKBOXES = [
-  { day: 1, label: "Mo" },
-  { day: 2, label: "Di" },
-  { day: 3, label: "Mi" },
-  { day: 4, label: "Do" },
-  { day: 5, label: "Fr" },
-  { day: 6, label: "Sa" },
-  { day: 7, label: "So" },
-];
+export function ShiftForm(props: Props) { return props.open ? <Editor key={props.shift?.id || "new"} {...props} /> : null; }
 
-export function ShiftForm({
-  open,
-  onOpenChange,
-  scheduleId,
-  defaultDayOfWeek = 1,
-  shift,
-}: ShiftFormProps) {
-  const isEdit = !!shift;
-  const queryClient = useQueryClient();
-
-  // Form state
-  const [shiftFrom, setShiftFrom] = useState("08:00");
-  const [shiftTo, setShiftTo] = useState("17:00");
-  const [divisionId, setDivisionId] = useState<string>("none");
-  const [maxEmployees, setMaxEmployees] = useState(1);
-  const [title, setTitle] = useState("");
-  const [pauseOption, setPauseOption] = useState<"PER_HOUR" | "PER_SHIFT">("PER_HOUR");
-  const [pauseValue, setPauseValue] = useState(0);
-  const [description, setDescription] = useState("");
-  const [repeatDays, setRepeatDays] = useState<number[]>([defaultDayOfWeek]);
-
-  // Fetch divisions for dropdown
-  const { data: divisionsData } = useQuery<{ divisions: DivisionOption[] }>({
-    queryKey: ["divisions"],
-    queryFn: async () => {
-      const res = await fetch("/api/divisions");
-      if (!res.ok) throw new Error("Failed to fetch divisions");
-      return res.json();
-    },
-  });
-
-  const divisions = divisionsData?.divisions ?? [];
-
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      if (shift) {
-        // Edit mode: populate from shift
-        setShiftFrom(shift.shiftFrom);
-        setShiftTo(shift.shiftTo);
-        setDivisionId(shift.divisionId ?? "none");
-        setMaxEmployees(shift.maxEmployees);
-        setTitle(shift.title ?? "");
-        setPauseOption(shift.pauseOption);
-        setPauseValue(shift.pauseValue);
-        setDescription(shift.description ?? "");
-        setRepeatDays([shift.dayOfWeek]);
-      } else {
-        // Create mode: reset to defaults
-        setShiftFrom("08:00");
-        setShiftTo("17:00");
-        setDivisionId("none");
-        setMaxEmployees(1);
-        setTitle("");
-        setPauseOption("PER_HOUR");
-        setPauseValue(0);
-        setDescription("");
-        setRepeatDays([defaultDayOfWeek]);
-      }
-    }
-  }, [open, shift, defaultDayOfWeek]);
-
-  // Toggle a day in repeatDays
-  function toggleDay(day: number) {
-    setRepeatDays((prev) =>
-      prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day]
-    );
-  }
-
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scheduleId,
-          divisionId: divisionId !== "none" ? divisionId : null,
-          dayOfWeek: repeatDays[0] ?? defaultDayOfWeek,
-          shiftFrom,
-          shiftTo,
-          maxEmployees,
-          pauseOption,
-          pauseValue,
-          title: title.trim() || null,
-          description: description.trim() || null,
-          repeatDays: repeatDays.length > 0 ? repeatDays : undefined,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Fehler beim Erstellen");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success(
-        repeatDays.length > 1
-          ? `${repeatDays.length} Schichten erstellt`
-          : "Schicht erstellt"
-      );
-      queryClient.invalidateQueries({ queryKey: ["schedule"] });
-      onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!shift) return;
-      const res = await fetch(`/api/shifts/${shift.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          divisionId: divisionId !== "none" ? divisionId : null,
-          dayOfWeek: repeatDays[0] ?? shift.dayOfWeek,
-          shiftFrom,
-          shiftTo,
-          maxEmployees,
-          pauseOption,
-          pauseValue,
-          title: title.trim() || null,
-          description: description.trim() || null,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Fehler beim Speichern");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success("Schicht aktualisiert");
-      queryClient.invalidateQueries({ queryKey: ["schedule"] });
-      onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!shift) return;
-      const res = await fetch(`/api/shifts/${shift.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Fehler beim Loeschen");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success("Schicht geloescht");
-      queryClient.invalidateQueries({ queryKey: ["schedule"] });
-      onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const isPending =
-    createMutation.isPending ||
-    updateMutation.isPending ||
-    deleteMutation.isPending;
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (shiftFrom >= shiftTo) {
-      toast.error("Startzeit muss vor Endzeit liegen");
-      return;
-    }
-    if (!isEdit && repeatDays.length === 0) {
-      toast.error("Mindestens ein Tag muss ausgewaehlt sein");
-      return;
-    }
-    if (isEdit) {
-      updateMutation.mutate();
-    } else {
-      createMutation.mutate();
-    }
-  }
-
-  function handleDelete() {
-    if (confirm("Schicht wirklich loeschen? Alle Buchungen werden entfernt.")) {
-      deleteMutation.mutate();
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>
-              {isEdit ? "Schicht bearbeiten" : "Neue Schicht erstellen"}
-            </DialogTitle>
-            <DialogDescription>
-              {isEdit
-                ? "Bearbeite die Details der Schicht."
-                : "Erstelle eine neue Schicht im Schichtplan."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="mt-4 space-y-4">
-            {/* Time pickers */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="shift-from">Von</Label>
-                <Input
-                  id="shift-from"
-                  type="time"
-                  value={shiftFrom}
-                  onChange={(e) => setShiftFrom(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="shift-to">Bis</Label>
-                <Input
-                  id="shift-to"
-                  type="time"
-                  value={shiftTo}
-                  onChange={(e) => setShiftTo(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Division select */}
-            <div className="space-y-1.5">
-              <Label>Arbeitsbereich</Label>
-              <Select
-                value={divisionId}
-                onValueChange={setDivisionId}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Kein Arbeitsbereich" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    <span className="text-muted-foreground">Kein Arbeitsbereich</span>
-                  </SelectItem>
-                  {divisions.map((div) => (
-                    <SelectItem key={div.id} value={div.id}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="size-3 rounded-full shrink-0"
-                          style={{ backgroundColor: div.color }}
-                        />
-                        {div.title}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Max employees */}
-            <div className="space-y-1.5">
-              <Label htmlFor="max-employees">Max. Mitarbeiter</Label>
-              <Input
-                id="max-employees"
-                type="number"
-                min={1}
-                max={100}
-                value={maxEmployees}
-                onChange={(e) => setMaxEmployees(parseInt(e.target.value, 10) || 1)}
-                required
-              />
-            </div>
-
-            {/* Title */}
-            <div className="space-y-1.5">
-              <Label htmlFor="shift-title">Titel (optional)</Label>
-              <Input
-                id="shift-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="z.B. Fruehschicht, Spaetschicht..."
-                maxLength={100}
-              />
-            </div>
-
-            {/* Pause options */}
-            <div className="space-y-1.5">
-              <Label>Pause</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={pauseValue}
-                  onChange={(e) => setPauseValue(parseInt(e.target.value, 10) || 0)}
-                  className="w-20"
-                  placeholder="Min"
-                />
-                <span className="text-sm text-muted-foreground">Minuten</span>
-              </div>
-              <div className="flex items-center gap-4 mt-1.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="pauseOption"
-                    checked={pauseOption === "PER_HOUR"}
-                    onChange={() => setPauseOption("PER_HOUR")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Pro Stunde</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="pauseOption"
-                    checked={pauseOption === "PER_SHIFT"}
-                    onChange={() => setPauseOption("PER_SHIFT")}
-                    className="accent-primary"
-                  />
-                  <span className="text-sm">Pro Schicht</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Repeat days - only for CREATE mode */}
-            {!isEdit && (
-              <div className="space-y-1.5">
-                <Label>Tage wiederholen</Label>
-                <div className="flex items-center gap-1.5">
-                  {DAY_CHECKBOXES.map(({ day, label }) => (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleDay(day)}
-                      className={cn(
-                        "size-9 rounded-md text-xs font-medium transition-colors border",
-                        repeatDays.includes(day)
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background text-muted-foreground border-border hover:bg-accent"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Die Schicht wird fuer alle ausgewaehlten Tage erstellt.
-                </p>
-              </div>
-            )}
-
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="shift-description">Beschreibung (optional)</Label>
-              <Textarea
-                id="shift-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Zusaetzliche Hinweise..."
-                rows={2}
-                maxLength={500}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="mt-6">
-            <div className="flex w-full items-center justify-between">
-              <div>
-                {isEdit && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={isPending}
-                  >
-                    {deleteMutation.isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
-                    Loeschen
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  disabled={isPending}
-                >
-                  Abbrechen
-                </Button>
-                <Button type="submit" disabled={isPending}>
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
-                  {isEdit ? "Speichern" : "Erstellen"}
-                </Button>
-              </div>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+function Editor({ open, onOpenChange, scheduleId, branchId, defaultDayOfWeek = 1, shift }: Props) {
+  const action = useAction(), [days, setDays] = useState([shift?.dayOfWeek || defaultDayOfWeek]);
+  const [copyDate, setCopyDate] = useState("");
+  // Nur Standorte, an denen die angemeldete Person planen darf.
+  const locations = useQuery({ queryKey: ["branches", "EDIT_SHIFTS"], queryFn: () => json<{ branches: BranchOption[] }>("/api/branches?right=EDIT_SHIFTS") });
+  const divisions = useQuery({ queryKey: ["divisions"], queryFn: () => json<{ divisions: DivisionOption[] }>("/api/divisions") });
+  const current = shift?.branchId ?? branchId;
+  const plannable = (locations.data?.branches ?? []).filter((b) => (b.isActive && b.customerId) || b.id === current);
+  const currentBranch = locations.data?.branches.find((b) => b.id === current);
+  return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-y-auto p-4 sm:max-w-[30rem]"><SheetHeader className="p-0 pb-4"><SheetTitle>{shift ? "Schicht bearbeiten" : "Schicht erstellen"}</SheetTitle><SheetDescription>Bei einer Endzeit vor der Startzeit endet die Schicht am Folgetag.</SheetDescription></SheetHeader><ErrorMessage error={locations.error || divisions.error} />
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={async e => {
+      e.preventDefault(); const f = new FormData(e.currentTarget);
+      const common = { divisionId: f.get("divisionId") || null, title: f.get("title") || null, shiftFrom: f.get("shiftFrom"), shiftTo: f.get("shiftTo"), maxEmployees: Number(f.get("maxEmployees")), pauseOption: f.get("pauseOption"), pauseValue: Number(f.get("pauseValue")), description: f.get("description") || null, requiredQualifications: String(f.get("qualifications")).split(",").map(s => s.trim()).filter(Boolean) };
+      const data = shift
+        ? { ...common, dayOfWeek: days[0], ...(f.get("branchId") && f.get("branchId") !== shift.branchId ? { branchId: f.get("branchId") } : {}) }
+        : { ...common, scheduleId, dayOfWeek: days[0], repeatDays: days, repeatWeeks: Number(f.get("repeatWeeks") || 1) };
+      await action.mutateAsync({ url: shift ? "/api/shifts/" + shift.id : "/api/shifts", method: shift ? "PATCH" : "POST", data, message: shift ? "Schicht geändert" : "Schicht angelegt" }).then(() => onOpenChange(false)).catch(() => {});
+    }}>
+      <label>Beginn<Input type="time" name="shiftFrom" defaultValue={shift?.shiftFrom || "08:00"} required /></label><label>Ende<Input type="time" name="shiftTo" defaultValue={shift?.shiftTo || "17:00"} required /></label>
+      {shift ? (
+        <label>Einsatzort<select name="branchId" defaultValue={shift.branchId || ""} className={selectClass} required={!shift.branchId}>
+          {!shift.branchId && <option value="">Bitte zuordnen</option>}
+          {plannable.map(b => <option key={b.id} value={b.id}>{b.name}{b.customer ? " · " + b.customer.name : ""}</option>)}
+        </select></label>
+      ) : (
+        <div className="text-sm"><span className="block">Einsatzort</span><span className="flex h-10 items-center text-muted-foreground">{currentBranch ? currentBranch.name + (currentBranch.customer ? " · " + currentBranch.customer.name : "") : "Standort des Plans"}</span></div>
+      )}
+      <label>Arbeitsbereich<select name="divisionId" defaultValue={shift?.divisionId || ""} className={selectClass}><option value="">Kein Arbeitsbereich</option>{divisions.data?.divisions.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label>
+      <label>Tätigkeit / Titel<Input name="title" list="shift-positions" defaultValue={shift?.title || ""} maxLength={100} /><datalist id="shift-positions">{[...new Set(currentBranch?.positions ?? [])].map(p => <option key={p} value={p} />)}</datalist></label>
+      <label>Benötigte Mitarbeitende<Input name="maxEmployees" type="number" min={1} max={100} defaultValue={shift?.maxEmployees || 1} required /></label>
+      <label>Pause in Minuten<Input name="pauseValue" type="number" min={0} max={120} defaultValue={shift?.pauseValue || 0} required /></label><label>Pausenregel<select name="pauseOption" className={selectClass} defaultValue={shift?.pauseOption || "PER_SHIFT"}><option value="PER_SHIFT">Pro Schicht</option><option value="PER_HOUR">Pro Stunde</option></select></label>
+      <fieldset className="sm:col-span-2"><legend className="mb-2">{shift ? "Wochentag" : "Wochentage"}</legend><div className="flex flex-wrap gap-2">{["Mo","Di","Mi","Do","Fr","Sa","So"].map((name,i) => <Button type="button" key={name} variant={days.includes(i+1) ? "default" : "outline"} aria-pressed={days.includes(i+1)} onClick={() => setDays(old => shift ? [i+1] : old.includes(i+1) ? old.length > 1 ? old.filter(d => d !== i+1) : old : [...old,i+1])}>{name}</Button>)}</div></fieldset>
+      {!shift && <label>Wöchentlich wiederholen (Wochen)<Input name="repeatWeeks" type="number" min={1} max={52} defaultValue={1} required /></label>}
+      <label className="sm:col-span-2">Erforderliche Qualifikationen (Komma getrennt)<Input name="qualifications" defaultValue={shift?.requiredQualifications?.join(", ") || ""} /></label>
+      <label className="sm:col-span-2">Hinweise<Textarea name="description" defaultValue={shift?.description || ""} maxLength={2000} /></label>
+      <div className="sm:col-span-2 flex flex-wrap justify-end gap-2">{shift && <ConfirmDialog title="Schicht absagen" description="Die Schicht wird gelöscht und alle Zuweisungen werden aufgehoben. Betroffene Mitarbeitende verlieren diesen Einsatz." confirmLabel="Schicht löschen" disabled={action.isPending} onConfirm={() => { action.mutateAsync({ url: "/api/shifts/" + shift.id, method: "DELETE", message: "Schicht abgesagt" }).then(() => onOpenChange(false)).catch(() => {}); }}><Button type="button" variant="destructive" disabled={action.isPending}>Schicht löschen</Button></ConfirmDialog>}<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button disabled={action.isPending}>Speichern</Button></div>
+    </form>
+    {shift && shift.branchId && <div className="border-t pt-4 flex flex-wrap items-end gap-3"><label className="flex-1">Schicht kopieren auf<Input type="date" value={copyDate} onChange={e => setCopyDate(e.target.value)} /></label><Button variant="outline" disabled={!copyDate || action.isPending} onClick={() => action.mutateAsync({ url: "/api/shifts/" + shift.id + "/copy", data: { date: copyDate }, message: "Schicht kopiert" }).then(() => onOpenChange(false)).catch(() => {})}>Kopieren</Button><p className="text-xs text-muted-foreground w-full">Details werden an denselben Standort kopiert. Mitarbeitende weist du anschließend zu.</p></div>}
+  </SheetContent></Sheet>;
 }

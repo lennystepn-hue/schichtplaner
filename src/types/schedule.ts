@@ -1,6 +1,7 @@
 /**
  * Shared types for schedule, shift, and booking data
- * as returned by the API.
+ * as returned by the API. Die API gibt nur aus, was die angemeldete
+ * Person sehen darf; Rechte stehen in "can" bzw. "access".
  */
 
 export type BookingUser = {
@@ -12,11 +13,13 @@ export type BookingUser = {
 };
 
 export type ShiftBooking = {
+  confirmedAt?: string | null;
   id: string;
   shiftId: string;
   userId: string;
   bookedAt: string;
-  bookedBy: string | null;
+  /** Nur fuer die Planung: Konto inaktiv oder genehmigte Abwesenheit. */
+  unavailable?: boolean;
   user: BookingUser;
 };
 
@@ -26,7 +29,26 @@ export type ShiftDivision = {
   color: string;
 };
 
+export type ShiftBranch = {
+  id: string;
+  name: string;
+  address: string | null;
+  meetingPoint: string | null;
+  notes: string | null;
+  customer: { id: string; name: string } | null;
+};
+
 export type ShiftData = {
+  branchId?: string | null;
+  branch?: ShiftBranch | null;
+  requiredQualifications?: string[];
+  occupiedCount?: number;
+  /** Fehlende Besetzung: benoetigte minus wirksam zugewiesene Plaetze. */
+  missing?: number;
+  date?: string;
+  endsNextDay?: boolean;
+  isPublic?: boolean;
+  can?: { edit: boolean; handle: boolean; request: boolean };
   id: string;
   scheduleId: string;
   divisionId: string | null;
@@ -57,6 +79,7 @@ export type BriefingData = {
 export type ScheduleData = {
   id: string;
   organizationId: string;
+  branchId?: string | null;
   weekNumber: number;
   year: number;
   isPublic: boolean;
@@ -64,6 +87,25 @@ export type ScheduleData = {
   showTitle: boolean;
   showPauses: boolean;
   shifts: ShiftData[];
+};
+
+/** Rechte der angemeldeten Person an einem Standortplan. */
+export type ScheduleAccess = {
+  view: boolean;
+  planner: boolean;
+  edit: boolean;
+  publish: boolean;
+  handleRequests: boolean;
+  request: boolean;
+  /** Zeiterfassung dieses Standorts einsehen (Stunden anderer zusaetzlich nur mit Personalrecht). */
+  viewTime?: boolean;
+};
+
+export type ScheduleResponse = {
+  schedule: ScheduleData;
+  branch?: { id: string; name: string; isActive: boolean; plannable: boolean; customer: { id: string; name: string } | null } | null;
+  access?: ScheduleAccess;
+  merged?: boolean;
 };
 
 export type DivisionOption = {

@@ -1,7 +1,11 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
-const db = new PrismaClient();
+const db = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 async function main() {
   console.log("Seeding database...");
@@ -12,10 +16,18 @@ async function main() {
       name: "Demo GmbH",
       address: "Musterstraße 42, 80331 München",
       nameFormat: "LASTNAME_FIRSTNAME",
-      scheduleVisibility: "ALL",
     },
   });
   console.log("  Created organization:", org.name);
+
+  // --- Kunde und Einsatzort (Demodaten) ---
+  const customer = await db.customer.create({
+    data: { organizationId: org.id, name: "Musterkunde GmbH", notes: "Demodaten" },
+  });
+  const branch = await db.branch.create({
+    data: { organizationId: org.id, customerId: customer.id, name: "Musterobjekt", address: "Musterstraße 1, 80331 München", meetingPoint: "Haupteingang" },
+  });
+  console.log("  Created customer and location");
 
   // --- Users ---
   const passwordHash = await bcrypt.hash("password123", 12);
@@ -141,7 +153,7 @@ async function main() {
       isActivated: true,
     },
   });
-  await db.organizationMember.create({
+  const manager1Member = await db.organizationMember.create({
     data: {
       organizationId: org.id,
       userId: manager1.id,
@@ -159,8 +171,9 @@ async function main() {
       isActivated: true,
     },
   });
+  const employeeMembers = [];
   for (const emp of employees) {
-    await db.organizationMember.create({
+    employeeMembers.push(await db.organizationMember.create({
       data: {
         organizationId: org.id,
         userId: emp.id,
@@ -168,9 +181,23 @@ async function main() {
         isActive: true,
         isActivated: true,
       },
-    });
+    }));
   }
   console.log("  Created organization memberships");
+
+  // --- Freigaben (Demodaten): Manager 1 plant das Musterobjekt und vier Personen ---
+  await db.branchAccess.create({
+    data: { organizationId: org.id, memberId: manager1Member.id, branchId: branch.id, rights: ["VIEW_SCHEDULE", "EDIT_SHIFTS", "HANDLE_REQUESTS", "REQUEST_SHIFTS"] },
+  });
+  for (const member of employeeMembers.slice(0, 4)) {
+    await db.staffAssignment.create({
+      data: { organizationId: org.id, managerMemberId: manager1Member.id, employeeMemberId: member.id, rights: ["ASSIGN_SHIFTS", "VIEW_PROFILE"] },
+    });
+  }
+  for (const member of employeeMembers) {
+    await db.branchAccess.create({ data: { organizationId: org.id, memberId: member.id, branchId: branch.id, rights: ["REQUEST_SHIFTS"] } });
+  }
+  console.log("  Created demo grants");
 
   // --- Divisions ---
   const divKasse = await db.division.create({
@@ -274,6 +301,7 @@ async function main() {
   const schedule = await db.schedule.create({
     data: {
       organizationId: org.id,
+      branchId: branch.id,
       weekNumber,
       year: now.getFullYear(),
       isPublic: true,
@@ -394,6 +422,7 @@ async function main() {
 
   await db.timeRecord.create({
     data: {
+      organizationId: org.id,
       userId: employees[0].id,
       date: yesterday,
       timeFrom: "06:00",
@@ -404,6 +433,7 @@ async function main() {
   });
   await db.timeRecord.create({
     data: {
+      organizationId: org.id,
       userId: employees[1].id,
       date: yesterday,
       timeFrom: "14:00",

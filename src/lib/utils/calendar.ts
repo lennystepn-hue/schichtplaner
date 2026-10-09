@@ -5,12 +5,13 @@ import {
   getISOWeekYear,
   format,
 } from "date-fns";
+import { berlinDate } from "@/lib/berlin";
 
 /**
  * Get the current ISO calendar week and year.
  */
 export function getCurrentKW(): { weekNumber: number; year: number } {
-  const now = new Date();
+  const now = new Date(berlinDate() + "T12:00:00");
   return { weekNumber: getISOWeek(now), year: getISOWeekYear(now) };
 }
 
@@ -71,7 +72,7 @@ export function getMonthKWs(
       seen.add(key);
       kws.push({ weekNumber: kw, year: kwYear });
     }
-    currentDate = addDays(currentDate, 7);
+    currentDate = addDays(currentDate, 1);
   }
 
   return kws;

@@ -26,13 +26,16 @@ export async function GET() {
     ],
   });
 
+  // Arbeitsbereiche selbst sind fuer die Planung sichtbar; wie viele Personen
+  // dazugehoeren, ist Personaldaten und bleibt der Administration vorbehalten.
+  const admin = isAdminOrAbove(member.role);
   const result = divisions.map((d) => ({
     id: d.id,
     title: d.title,
     description: d.description,
     color: d.color,
     isSystem: d.isSystem,
-    memberCount: d._count.members,
+    memberCount: admin ? d._count.members : null,
     createdAt: d.createdAt,
   }));
 

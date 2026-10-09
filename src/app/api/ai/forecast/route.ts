@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { isAIFeatureEnabled } from "@/lib/ai/client";
 import { generateForecast } from "@/lib/ai/forecast";
 
@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json(
-      { error: "Nur Manager koennen Prognosen einsehen" },
+      { error: "Nur die Administration kann Prognosen einsehen" },
       { status: 403 }
     );
   }

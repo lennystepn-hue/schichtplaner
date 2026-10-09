@@ -244,7 +244,8 @@ async function gatherContext(
       organizationId: orgId,
       weekNumber: prevWeek,
       year: prevYear,
-      branchId: null,
+      // Vorwoche desselben Standorts
+      branchId: schedule.branchId,
       deletedAt: null,
     },
     include: {

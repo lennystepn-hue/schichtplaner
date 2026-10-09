@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { SUPPORTED_COUNTRIES, computeHolidaysForYears } from "@/lib/holidays";
 
 // GET /api/settings — get all settings for the org
 export async function GET() {
@@ -38,7 +39,6 @@ export async function GET() {
       name: org.name,
       address: org.address,
       nameFormat: org.nameFormat,
-      scheduleVisibility: org.scheduleVisibility,
     },
     timeSettings: org.timeSettings ?? {
       whoCanUse: "ALL",
@@ -50,12 +50,12 @@ export async function GET() {
     absenceCategories: org.absenceCategories,
     holidays: org.holidays,
     orgSettings: org.settings ?? {
-      aiEnabled: true,
-      aiAutoPlanner: true,
-      aiAnomalyDetection: true,
-      aiChatEnabled: true,
-      aiForecast: true,
-      aiSmartBriefing: true,
+      aiEnabled: false,
+      aiAutoPlanner: false,
+      aiAnomalyDetection: false,
+      aiChatEnabled: false,
+      aiForecast: false,
+      aiSmartBriefing: false,
       smsEnabled: false,
     },
   });
@@ -75,7 +75,6 @@ const updateSettingsSchema = z.object({
       "NICKNAME",
     ])
     .optional(),
-  scheduleVisibility: z.enum(["ALL", "OWN_ONLY"]).optional(),
 
   // Time settings
   timeSettings: z
@@ -89,9 +88,48 @@ const updateSettingsSchema = z.object({
     .optional(),
 
   // Holiday location
-  holidayCountry: z.string().min(2).max(2).optional(),
-  holidayState: z.string().optional(),
+  holidayCountry: z.enum(SUPPORTED_COUNTRIES).optional(),
+  holidayState: z.string().max(4).optional(),
 });
+
+/** Wie viele Jahre im Voraus Feiertage angelegt werden. */
+const HOLIDAY_YEARS_AHEAD = 2;
+
+/**
+ * Legt die Feiertage fuer das gewaehlte Land/Bundesland neu an.
+ * Vergangene Jahre bleiben unveraendert, damit alte Plaene stimmig bleiben.
+ */
+async function regenerateHolidays(
+  organizationId: string,
+  country: string,
+  state: string | null
+) {
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(
+    { length: HOLIDAY_YEARS_AHEAD + 1 },
+    (_, index) => currentYear + index
+  );
+
+  const holidays = computeHolidaysForYears(country, state, years);
+
+  await db.$transaction([
+    db.holiday.deleteMany({
+      where: {
+        organizationId,
+        date: { gte: new Date(`${currentYear}-01-01T00:00:00.000Z`) },
+      },
+    }),
+    db.holiday.createMany({
+      data: holidays.map((holiday) => ({
+        organizationId,
+        name: holiday.name,
+        date: new Date(`${holiday.date}T00:00:00.000Z`),
+        country,
+        state: state || null,
+      })),
+    }),
+  ]);
+}
 
 export async function PATCH(request: NextRequest) {
   const member = await getCurrentMember();
@@ -125,8 +163,6 @@ export async function PATCH(request: NextRequest) {
   if (data.name !== undefined) orgUpdate.name = data.name;
   if (data.address !== undefined) orgUpdate.address = data.address;
   if (data.nameFormat !== undefined) orgUpdate.nameFormat = data.nameFormat;
-  if (data.scheduleVisibility !== undefined)
-    orgUpdate.scheduleVisibility = data.scheduleVisibility;
 
   if (Object.keys(orgUpdate).length > 0) {
     await db.organization.update({
@@ -157,6 +193,26 @@ export async function PATCH(request: NextRequest) {
         update: tsUpdate,
       });
     }
+  }
+
+  // Feiertage: Land/Bundesland merken und den Kalender neu aufbauen.
+  if (data.holidayCountry !== undefined || data.holidayState !== undefined) {
+    const existing = await db.holiday.findFirst({
+      where: { organizationId: member.organizationId },
+      orderBy: { date: "desc" },
+      select: { country: true, state: true },
+    });
+
+    const country = data.holidayCountry ?? existing?.country ?? "DE";
+    // Beim Wechsel des Landes passt ein altes Bundesland nicht mehr.
+    const state =
+      data.holidayState !== undefined
+        ? data.holidayState || null
+        : data.holidayCountry !== undefined
+          ? null
+          : (existing?.state ?? null);
+
+    await regenerateHolidays(member.organizationId, country, state);
   }
 
   return NextResponse.json({ success: true });

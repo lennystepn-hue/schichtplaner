@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
+import { berlinDate } from "@/lib/berlin";
 
-export default function ScheduleMonthPage() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = now.getFullYear();
-  redirect(`/schedule/month/${month}-${year}`);
+export default async function ScheduleMonthPage({ searchParams }: { searchParams: Promise<{ standort?: string }> }) {
+  const { standort } = await searchParams;
+  const today = berlinDate();
+  redirect(`/schedule/month/${today.slice(5, 7)}-${today.slice(0, 4)}${standort ? "?standort=" + encodeURIComponent(standort) : ""}`);
 }

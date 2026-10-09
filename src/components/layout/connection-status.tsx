@@ -1,37 +1,42 @@
 "use client";
 
-import { useSocketStatus, type SocketStatus } from "@/lib/socket";
-import { cn } from "@/lib/utils";
+import { useSocketStatus } from "@/lib/socket";
 import { Wifi, WifiOff } from "lucide-react";
 
-const statusConfig: Record<SocketStatus, { color: string; label: string }> = {
-  connected: { color: "bg-green-500", label: "Verbunden" },
-  disconnected: { color: "bg-red-500", label: "Getrennt" },
-  reconnecting: { color: "bg-amber-500 animate-pulse", label: "Verbinde..." },
-};
-
+/**
+ * Zeigt nur an, wenn die Live-Verbindung fehlt. Eine stehende Verbindung ist
+ * der Normalfall und braucht kein Dauerlicht in der Kopfleiste.
+ */
 export function ConnectionStatus() {
   const status = useSocketStatus();
-  const config = statusConfig[status];
+
+  if (status === "connected") {
+    return (
+      <span
+        className="hidden items-center text-muted-foreground/60 sm:flex"
+        title="Live-Verbindung steht"
+      >
+        <Wifi className="size-3.5" />
+        <span className="sr-only">Live-Verbindung steht</span>
+      </span>
+    );
+  }
+
+  const reconnecting = status === "reconnecting";
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-        status === "connected"
-          ? "text-green-700 dark:text-green-400"
-          : status === "reconnecting"
-            ? "text-amber-700 dark:text-amber-400"
-            : "text-red-700 dark:text-red-400"
-      )}
-      title={`WebSocket: ${config.label}`}
+    <span
+      className="flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive"
+      title={
+        reconnecting
+          ? "Verbindung wird wiederhergestellt"
+          : "Keine Live-Verbindung - Aenderungen erscheinen verzoegert"
+      }
     >
-      {status === "connected" ? (
-        <Wifi className="size-3.5" />
-      ) : (
-        <WifiOff className="size-3.5" />
-      )}
-      <span className={cn("size-2 rounded-full", config.color)} />
-    </div>
+      <WifiOff className="size-3.5" />
+      <span className="hidden sm:inline">
+        {reconnecting ? "Verbinde ..." : "Offline"}
+      </span>
+    </span>
   );
 }

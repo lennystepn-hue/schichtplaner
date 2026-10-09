@@ -1,27 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: {
-    default: "Schichtplaner 2.0",
-    template: "%s | Schichtplaner 2.0",
+    default: "AKRO Schichtplaner",
+    template: "%s | AKRO Schichtplaner",
   },
-  description: "Moderne Schichtplanung mit KI",
+  description: "Dienst- und Schichtplanung der AKRO GmbH",
+  icons: { icon: "/akro/img/favicon.svg" },
   metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
   openGraph: {
-    title: "Schichtplaner 2.0",
-    description: "Moderne Schichtplanung mit KI",
+    title: "AKRO Schichtplaner",
+    description: "Dienst- und Schichtplanung der AKRO GmbH",
     type: "website",
   },
 };
@@ -32,12 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+    // data-brand wie im AKRO-Designsystem: die App laeuft unter der
+    // Dachmarke und damit in AKRO-Blau.
+    <html lang="de" data-brand="group" suppressHydrationWarning>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

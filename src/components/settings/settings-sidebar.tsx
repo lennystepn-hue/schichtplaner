@@ -57,7 +57,7 @@ export function SettingsSidebar({
   return (
     <aside className="w-56 shrink-0">
       <nav>
-        <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <h3 className="mb-2 px-3 text-xs font-semibold text-muted-foreground">
           Einstellungen
         </h3>
         <ul className="space-y-0.5">
@@ -72,8 +72,8 @@ export function SettingsSidebar({
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     active
-                      ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <Icon className="size-4" />

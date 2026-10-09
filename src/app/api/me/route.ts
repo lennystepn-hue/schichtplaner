@@ -1,40 +1,17 @@
-import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { NextResponse } from "next/server";
+import { api } from "@/lib/api";
+import { requireAccess, summary } from "@/lib/access";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const member = await db.organizationMember.findFirst({
-    where: { userId: session.user.id, isActive: true },
-    include: {
-      organization: { select: { id: true, name: true } },
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          profileImage: true,
-          locale: true,
-        },
-      },
-    },
-    orderBy: { joinedAt: "asc" },
-  });
-
-  if (!member) {
-    return NextResponse.json({ error: "No membership found" }, { status: 404 });
-  }
-
-  return NextResponse.json({
-    id: member.id,
-    role: member.role,
-    organizationId: member.organization.id,
-    organizationName: member.organization.name,
-    user: member.user,
+  return api(async () => {
+    const a = await requireAccess();
+    const m = a.member;
+    return {
+      id: m.id,
+      role: m.role,
+      organizationId: m.organizationId,
+      organizationName: m.organization.name,
+      user: { id: m.user.id, firstName: m.user.firstName, lastName: m.user.lastName, email: m.user.email, profileImage: m.user.profileImage, locale: m.user.locale },
+      access: summary(a),
+    };
   });
 }

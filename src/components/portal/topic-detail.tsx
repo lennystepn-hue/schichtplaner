@@ -100,8 +100,8 @@ export function TopicDetail({ topicId }: Props) {
   if (isLoading) {
     return (
       <div className="flex-1 space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-        <div className="h-32 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-32 animate-pulse rounded bg-muted" />
       </div>
     );
   }
@@ -114,7 +114,7 @@ export function TopicDetail({ topicId }: Props) {
           <ArrowLeft className="size-4" />
           Zurueck
         </Button>
-        <p className="text-slate-500">Thema nicht gefunden.</p>
+        <p className="text-muted-foreground">Thema nicht gefunden.</p>
       </div>
     );
   }
@@ -127,12 +127,12 @@ export function TopicDetail({ topicId }: Props) {
         Zurueck zu Themen
       </Button>
 
-      <div className="rounded-lg border bg-white dark:bg-slate-900 dark:border-slate-800">
+      <div className="akro-panel">
         {/* Header */}
-        <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+        <div className="flex items-center justify-between border-b p-5">
           <div>
             <h2 className="text-xl font-bold">{topic.title}</h2>
-            <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+            <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               {topic.creator && (
                 <span>
                   Erstellt von {topic.creator.firstName} {topic.creator.lastName}
@@ -146,7 +146,7 @@ export function TopicDetail({ topicId }: Props) {
           <Button
             variant="ghost"
             size="sm"
-            className="text-red-600 hover:text-red-700"
+            className="text-destructive hover:text-destructive"
             onClick={() => deleteMutation.mutate()}
           >
             <Trash2 className="size-4" />
@@ -154,17 +154,17 @@ export function TopicDetail({ topicId }: Props) {
         </div>
 
         {/* Posts */}
-        <div className="divide-y dark:divide-slate-800">
+        <div className="divide-y dark:divide-border">
           {topic.posts.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-slate-500">
-              <MessageCircle className="mb-2 size-8 text-slate-300" />
+            <div className="flex flex-col items-center py-12 text-muted-foreground">
+              <MessageCircle className="mb-2 size-8 text-muted-foreground" />
               <p className="text-sm">Noch keine Beitraege. Schreibe den ersten!</p>
             </div>
           ) : (
             topic.posts.map((post) => (
               <div key={post.id} className="flex gap-3 p-5">
                 <Avatar className="size-9 shrink-0">
-                  <AvatarFallback className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                  <AvatarFallback className="text-xs bg-accent text-primary dark:text-primary">
                     {initials(post.user)}
                   </AvatarFallback>
                 </Avatar>
@@ -173,11 +173,11 @@ export function TopicDetail({ topicId }: Props) {
                     <span className="text-sm font-medium">
                       {post.user.firstName} {post.user.lastName}
                     </span>
-                    <time className="text-xs text-slate-400">
+                    <time className="text-xs text-muted-foreground">
                       {format(new Date(post.createdAt), "dd. MMM yyyy, HH:mm", { locale: de })}
                     </time>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
                     {post.text}
                   </p>
                 </div>

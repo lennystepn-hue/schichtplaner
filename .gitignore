@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Datenbank-Backups enthalten Personendaten - niemals einchecken
+backups/

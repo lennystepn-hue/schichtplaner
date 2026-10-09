@@ -47,6 +47,8 @@ interface MessageFull {
     user: UserInfo;
   }[];
   replies: ReplyMsg[];
+  /** Weitere Empfaenger, deren Namen die betrachtende Person nicht sehen darf. */
+  hiddenRecipients?: number;
 }
 
 export function MessageDetail() {
@@ -103,8 +105,8 @@ export function MessageDetail() {
   if (isLoading) {
     return (
       <div className="flex-1 space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
-        <div className="h-32 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-32 animate-pulse rounded bg-muted" />
       </div>
     );
   }
@@ -117,7 +119,7 @@ export function MessageDetail() {
           <ArrowLeft className="size-4" />
           Zurueck
         </Button>
-        <p className="text-slate-500">Nachricht nicht gefunden.</p>
+        <p className="text-muted-foreground">Nachricht nicht gefunden.</p>
       </div>
     );
   }
@@ -134,14 +136,14 @@ export function MessageDetail() {
         Zurueck
       </Button>
 
-      <div className="rounded-lg border bg-white p-6 dark:bg-slate-900 dark:border-slate-800">
+      <div className="akro-panel p-6">
         {/* Subject */}
         <h2 className="text-xl font-bold mb-4">{msg.subject}</h2>
 
         {/* Sender info */}
         <div className="flex items-start gap-3 mb-4">
           <Avatar className="size-10">
-            <AvatarFallback className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+            <AvatarFallback className="bg-accent text-primary dark:text-primary">
               {initials(msg.sender)}
             </AvatarFallback>
           </Avatar>
@@ -150,20 +152,21 @@ export function MessageDetail() {
               <span className="font-medium">
                 {msg.sender.firstName} {msg.sender.lastName}
               </span>
-              <time className="text-xs text-slate-400">
+              <time className="text-xs text-muted-foreground">
                 {format(new Date(msg.createdAt), "dd. MMMM yyyy, HH:mm", { locale: de })}
               </time>
             </div>
-            <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
               <User className="size-3" />
               An:{" "}
-              {msg.recipients.map((r) => `${r.user.firstName} ${r.user.lastName}`).join(", ")}
+              {msg.recipients.map((r) => `${r.user.firstName} ${r.user.lastName} (${r.isRead ? "gelesen" : "ungelesen"})`).join(", ")}
+              {msg.hiddenRecipients ? `${msg.recipients.length ? " und " : ""}${msg.hiddenRecipients} ${msg.hiddenRecipients === 1 ? "weitere Person" : "weitere Personen"}` : ""}
             </div>
           </div>
         </div>
 
         {/* Body */}
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
           {msg.body}
         </div>
 
@@ -171,26 +174,26 @@ export function MessageDetail() {
         {msg.replies.length > 0 && (
           <>
             <Separator className="my-6" />
-            <h3 className="mb-4 text-sm font-semibold text-slate-500">
+            <h3 className="mb-4 text-sm font-semibold text-muted-foreground">
               Antworten ({msg.replies.length})
             </h3>
             <div className="space-y-4">
               {msg.replies.map((reply) => (
-                <div key={reply.id} className="rounded-md border-l-2 border-indigo-200 bg-slate-50 p-4 dark:bg-slate-800/50 dark:border-indigo-700">
+                <div key={reply.id} className="rounded-md border-l-2 border-primary/30 bg-muted p-4/50">
                   <div className="mb-2 flex items-center gap-2">
                     <Avatar className="size-7">
-                      <AvatarFallback className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                      <AvatarFallback className="text-xs bg-accent text-primary dark:text-primary">
                         {initials(reply.sender)}
                       </AvatarFallback>
                     </Avatar>
                     <span className="text-sm font-medium">
                       {reply.sender.firstName} {reply.sender.lastName}
                     </span>
-                    <time className="text-xs text-slate-400">
+                    <time className="text-xs text-muted-foreground">
                       {format(new Date(reply.createdAt), "dd. MMM yyyy, HH:mm", { locale: de })}
                     </time>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">
                     {reply.body}
                   </p>
                 </div>
@@ -208,7 +211,7 @@ export function MessageDetail() {
           </Button>
           <Button
             variant="outline"
-            className="gap-2 text-red-600 hover:text-red-700"
+            className="gap-2 text-destructive hover:text-destructive"
             onClick={() => trashMutation.mutate()}
           >
             <Trash2 className="size-4" />

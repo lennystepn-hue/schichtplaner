@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { berlinDate } from "@/lib/berlin";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Check, X } from "lucide-react";
@@ -50,6 +51,8 @@ type AbsenceData = {
     lastName: string;
   };
   category: AbsenceCategory;
+  /** Vom Server: darf die angemeldete Person diesen Antrag entscheiden? */
+  canDecide?: boolean;
 };
 
 type EmployeeOption = {
@@ -81,19 +84,19 @@ function getStatusBadge(status: string) {
   switch (status) {
     case "PENDING":
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+        <Badge className="bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn">
           Ausstehend
         </Badge>
       );
     case "APPROVED":
       return (
-        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+        <Badge className="bg-ok/10 text-ok dark:bg-ok/20 dark:text-ok">
           Genehmigt
         </Badge>
       );
     case "DECLINED":
       return (
-        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+        <Badge className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
           Abgelehnt
         </Badge>
       );
@@ -104,7 +107,12 @@ function getStatusBadge(status: string) {
 
 // ---------- Component ----------
 
-export function AbsenceForm({
+export function AbsenceForm(props: AbsenceFormProps) {
+  const { data: member } = useCurrentMember();
+  if (!member) return null;
+  return props.open ? <AbsenceEditor key={props.absence?.id || "new"} {...props} /> : null;
+}
+function AbsenceEditor({
   open,
   onOpenChange,
   absence,
@@ -115,19 +123,17 @@ export function AbsenceForm({
   const isEdit = !!absence;
   const queryClient = useQueryClient();
   const { data: currentMember } = useCurrentMember();
-  const isAdmin =
-    currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
 
   // Form state
-  const [userId, setUserId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [userId, setUserId] = useState(absence?.userId || currentMember?.user.id || "");
+  const [categoryId, setCategoryId] = useState(absence?.categoryId || "");
   const [dateFrom, setDateFrom] = useState(
-    defaultDateFrom || format(new Date(), "yyyy-MM-dd")
+    absence?.dateFrom.slice(0,10) || defaultDateFrom || berlinDate()
   );
   const [dateTo, setDateTo] = useState(
-    defaultDateTo || format(new Date(), "yyyy-MM-dd")
+    absence?.dateTo.slice(0,10) || defaultDateTo || berlinDate()
   );
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(absence?.note || "");
 
   // Fetch categories
   const { data: categoriesData } = useQuery<{ categories: AbsenceCategory[] }>({
@@ -140,25 +146,6 @@ export function AbsenceForm({
   });
 
   const categories = categoriesData?.categories ?? [];
-
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      if (absence) {
-        setUserId(absence.userId);
-        setCategoryId(absence.categoryId);
-        setDateFrom(absence.dateFrom.slice(0, 10));
-        setDateTo(absence.dateTo.slice(0, 10));
-        setNote(absence.note ?? "");
-      } else {
-        setUserId(currentMember?.user?.id ?? "");
-        setCategoryId(categories[0]?.id ?? "");
-        setDateFrom(defaultDateFrom || format(new Date(), "yyyy-MM-dd"));
-        setDateTo(defaultDateTo || format(new Date(), "yyyy-MM-dd"));
-        setNote("");
-      }
-    }
-  }, [open, absence, currentMember, categories, defaultDateFrom, defaultDateTo]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -279,8 +266,8 @@ export function AbsenceForm({
               </div>
             )}
 
-            {/* Employee select (only for admins in create mode) */}
-            {!isEdit && isAdmin && employees.length > 0 && (
+            {/* Personenauswahl nur, wenn neben der eigenen Person weitere freigegeben sind */}
+            {!isEdit && employees.length > 1 && (
               <div className="space-y-1.5">
                 <Label>Mitarbeiter</Label>
                 <Select value={userId} onValueChange={setUserId}>
@@ -373,8 +360,8 @@ export function AbsenceForm({
 
           <DialogFooter className="mt-6">
             <div className="flex items-center gap-2 w-full">
-              {/* Approve/Decline buttons for admin on pending absences */}
-              {isEdit && isAdmin && absence?.status === "PENDING" && (
+              {/* Genehmigen/Ablehnen nur mit dem Recht fuer genau diese Person */}
+              {isEdit && absence?.canDecide && absence.status === "PENDING" && (
                 <div className="flex gap-2 mr-auto">
                   <Button
                     type="button"
@@ -382,7 +369,7 @@ export function AbsenceForm({
                     size="sm"
                     onClick={handleApprove}
                     disabled={isPending}
-                    className="text-green-600 border-green-300 hover:bg-green-50 dark:hover:bg-green-950"
+                    className="text-ok border-ok/40 hover:bg-ok/10 dark:hover:bg-ok/20"
                   >
                     <Check className="size-4" />
                     Genehmigen
@@ -393,7 +380,7 @@ export function AbsenceForm({
                     size="sm"
                     onClick={handleDecline}
                     disabled={isPending}
-                    className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                    className="text-destructive border-destructive/40 hover:bg-destructive/10 dark:hover:bg-destructive/20"
                   >
                     <X className="size-4" />
                     Ablehnen

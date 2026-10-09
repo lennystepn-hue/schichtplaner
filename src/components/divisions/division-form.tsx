@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Loader2, Pencil } from "lucide-react";
@@ -50,18 +50,18 @@ export function DivisionForm({ division, trigger }: DivisionFormProps) {
   const [color, setColor] = useState(PRESET_COLORS[0].hex);
   const queryClient = useQueryClient();
 
-  // Pre-fill for edit mode
-  useEffect(() => {
-    if (open && division) {
+  function changeOpen(next: boolean) {
+    if (next && division) {
       setTitle(division.title);
       setDescription(division.description ?? "");
       setColor(division.color);
-    } else if (open && !division) {
+    } else if (next && !division) {
       setTitle("");
       setDescription("");
       setColor(PRESET_COLORS[0].hex);
     }
-  }, [open, division]);
+    setOpen(next);
+  }
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -114,7 +114,7 @@ export function DivisionForm({ division, trigger }: DivisionFormProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button>

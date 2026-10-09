@@ -1,136 +1,29 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { api, body, serial, ApiError } from "@/lib/api";
+import { canSeeTime, requireAccess } from "@/lib/access";
+import { timeChange, snapshot, timeReviewers, validatedTimeChange } from "@/lib/time-service";
+import { notify } from "@/lib/planning";
 
-const updateSchema = z.object({
-  date: z.string().optional(),
-  timeFrom: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .optional()
-    .nullable(),
-  timeTo: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .optional()
-    .nullable(),
-  durationHours: z.number().int().min(0).optional().nullable(),
-  durationMinutes: z.number().int().min(0).max(59).optional().nullable(),
-  categoryId: z.string().optional().nullable(),
-  comment: z.string().optional().nullable(),
-});
+type Context = { params: Promise<{ id: string }> };
 
-// PATCH /api/time/:id — edit time record
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
-  const record = await db.timeRecord.findUnique({ where: { id } });
-  if (!record) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  // Check ownership or manager+
-  if (!isManagerOrAbove(member.role) && record.userId !== member.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  // Check same org
-  const targetMember = await db.organizationMember.findFirst({
-    where: {
-      organizationId: member.organizationId,
-      userId: record.userId,
-      isActive: true,
-    },
+/** Korrektur beantragen: an eigener Buchung oder an einer, die man bearbeiten darf. */
+export async function PATCH(request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { id } = await context.params;
+    const { reason, ...data } = await body(request, timeChange.extend({ reason: z.string().trim().min(5, "Bitte eine Begründung mit mindestens fünf Zeichen angeben.").max(1000) }));
+    return serial(async tx => {
+      const record = await tx.timeRecord.findFirst({ where: { id, organizationId: a.orgId } });
+      if (!record || !(record.userId === a.userId || canSeeTime(a, record, "edit"))) throw new ApiError("Zeitbuchung nicht gefunden.", 404);
+      await validatedTimeChange(tx, a.orgId, record, data);
+      if (await tx.timeCorrection.findFirst({ where: { recordId: id, status: "PENDING" } })) throw new ApiError("Für diese Buchung wartet bereits eine Korrektur auf Freigabe.", 409);
+      const correction = await tx.timeCorrection.create({ data: { organizationId: a.orgId, recordId: id, requesterId: a.userId, reason, before: snapshot(record), proposed: data } });
+      await notify(tx, a.orgId, a.userId, await timeReviewers(tx, a.orgId, record), "Zeitkorrektur zur Freigabe", reason);
+      return { record, correction, pending: true };
+    });
   });
-  if (!targetMember) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = updateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const data = parsed.data;
-  const updateData: Record<string, unknown> = {};
-
-  if (data.date !== undefined) {
-    updateData.date = new Date(data.date + "T00:00:00.000Z");
-  }
-  if (data.timeFrom !== undefined) updateData.timeFrom = data.timeFrom;
-  if (data.timeTo !== undefined) updateData.timeTo = data.timeTo;
-  if (data.durationHours !== undefined)
-    updateData.durationHours = data.durationHours;
-  if (data.durationMinutes !== undefined)
-    updateData.durationMinutes = data.durationMinutes;
-  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
-  if (data.comment !== undefined) updateData.comment = data.comment;
-
-  const updated = await db.timeRecord.update({
-    where: { id },
-    data: updateData,
-    include: {
-      category: { select: { id: true, name: true } },
-    },
-  });
-
-  return NextResponse.json({ record: updated });
 }
 
-// DELETE /api/time/:id — delete time record
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
-  const record = await db.timeRecord.findUnique({ where: { id } });
-  if (!record) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  // Check ownership or manager+
-  if (!isManagerOrAbove(member.role) && record.userId !== member.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  // Check same org
-  const targetMember = await db.organizationMember.findFirst({
-    where: {
-      organizationId: member.organizationId,
-      userId: record.userId,
-      isActive: true,
-    },
-  });
-  if (!targetMember) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  await db.timeRecord.delete({ where: { id } });
-
-  return NextResponse.json({ success: true });
+export async function DELETE() {
+  return api(async () => { await requireAccess(); throw new ApiError("Zeitbuchungen bleiben nachvollziehbar erhalten. Bitte eine begründete Korrektur beantragen.", 409); });
 }

@@ -175,7 +175,7 @@ export function LiveMode({ scheduleId, isManager }: LiveModeProps) {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 border-purple-300 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                className="gap-1.5 text-[var(--brand)] hover:bg-accent hover:text-[var(--brand)]"
                 onClick={() => startMutation.mutate()}
                 disabled={isPending}
               >
@@ -190,7 +190,7 @@ export function LiveMode({ scheduleId, isManager }: LiveModeProps) {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => {
                   if (confirm("Live-Modus wirklich stoppen?")) {
                     stopMutation.mutate();
@@ -216,14 +216,12 @@ export function LiveMode({ scheduleId, isManager }: LiveModeProps) {
             className="flex items-center gap-1.5"
             onClick={() => setExpanded((prev) => !prev)}
           >
-            <Badge
-              variant="default"
-              className="gap-1.5 bg-purple-600 hover:bg-purple-700 cursor-pointer"
-            >
-              <span className="relative flex size-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-300 opacity-75" />
-                <span className="relative inline-flex rounded-full size-2 bg-white" />
-              </span>
+            <Badge variant="default" className="cursor-pointer gap-1.5">
+              {/* Ruhiger Punkt statt Blinken - der Zustand ist dauerhaft. */}
+              <span
+                aria-hidden="true"
+                className="inline-flex size-2 rounded-full bg-white"
+              />
               LIVE
               {expanded ? (
                 <ChevronUp className="size-3" />
@@ -263,7 +261,7 @@ function LivePanel({
   const queryClient = useQueryClient();
 
   return (
-    <div className="mt-3 rounded-lg border-2 border-purple-200 bg-purple-50/50 p-4 space-y-4">
+    <div className="mt-3 rounded-lg border-2 text-[var(--brand)] bg-accent/50 p-4 space-y-4">
       {/* Timer */}
       <LiveTimer startedAt={session.startedAt} />
 
@@ -289,7 +287,7 @@ function LivePanel({
               className={cn(
                 "text-xs",
                 day.enabled
-                  ? "bg-purple-600 hover:bg-purple-600"
+                  ? "text-[var(--brand)] hover:text-[var(--brand)]"
                   : "opacity-50"
               )}
             >
@@ -300,7 +298,7 @@ function LivePanel({
       )}
 
       {/* Live Log */}
-      <LiveLogFeed logs={session.logs} />
+      <LiveLogFeed logs={session.logs ?? []} />
     </div>
   );
 }
@@ -334,9 +332,9 @@ function LiveTimer({ startedAt }: { startedAt: string }) {
   }, [startedAt]);
 
   return (
-    <div className="flex items-center gap-2 text-sm text-purple-700">
+    <div className="flex items-center gap-2 text-sm text-[var(--brand)]">
       <Clock className="size-4" />
-      <span className="font-mono font-medium">{elapsed}</span>
+      <span className="tabular font-medium">{elapsed}</span>
       <span className="text-xs text-muted-foreground">aktiv</span>
     </div>
   );
@@ -388,7 +386,7 @@ function DayToggles({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-purple-700">
+      <p className="text-xs font-medium text-[var(--brand)]">
         Tage fuer Self-Booking:
       </p>
       <div className="flex items-center gap-3 flex-wrap">
@@ -430,16 +428,16 @@ function LiveLogFeed({ logs }: { logs: LiveLogData[] }) {
 
   return (
     <div className="space-y-1.5 max-h-48 overflow-y-auto">
-      <p className="text-xs font-medium text-purple-700">Aktivitaet:</p>
+      <p className="text-xs font-medium text-[var(--brand)]">Aktivitaet:</p>
       {logs.map((log) => (
         <div
           key={log.id}
-          className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-white/60"
+          className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-card/60"
         >
           {log.action === "BOOK" ? (
-            <UserPlus className="size-3 text-green-600 shrink-0" />
+            <UserPlus className="size-3 text-ok shrink-0" />
           ) : (
-            <UserMinus className="size-3 text-red-500 shrink-0" />
+            <UserMinus className="size-3 text-destructive shrink-0" />
           )}
           <span className="font-medium">
             {log.user.firstName} {log.user.lastName}
@@ -483,7 +481,9 @@ export function LiveBorder({
 
   return (
     <div className="relative">
-      <div className="absolute inset-0 rounded-lg border-2 border-purple-400 animate-pulse pointer-events-none z-10" />
+      {/* Ruhige Markenkante statt Dauerpulsieren - die Live-Sitzung ist
+          ein Zustand, kein Alarm. */}
+      <div className="pointer-events-none absolute inset-0 z-10 rounded-[var(--radius-panel)] border-2 border-[var(--brand)]" />
       {children}
     </div>
   );

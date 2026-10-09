@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Search, Users, X } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -56,17 +55,16 @@ export function EmployeeNav({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Fetch all active employees
-  const { data } = useQuery<{ members: OrgEmployee[] }>({
-    queryKey: ["employees", "active"],
-    queryFn: async () => {
-      const res = await fetch("/api/employees?status=active");
-      if (!res.ok) throw new Error("Fehler beim Laden");
-      return res.json();
-    },
-  });
-
-  const employees = data?.members ?? [];
+  // Nur Personen, die im Plan ohnehin sichtbar sind - keine Personalliste.
+  const employees = useMemo(() => {
+    const byUser = new Map<string, OrgEmployee>();
+    for (const shift of shifts) {
+      for (const booking of shift.bookings) {
+        if (!byUser.has(booking.userId)) byUser.set(booking.userId, { id: booking.userId, role: "", user: { ...booking.user, email: "" } });
+      }
+    }
+    return [...byUser.values()];
+  }, [shifts]);
 
   // Calculate hours per employee from shifts data
   const employeeHours = useMemo(() => {
@@ -123,15 +121,15 @@ export function EmployeeNav({
             {selectedEmployee ? (
               <>
                 {selectedEmployee.user.firstName} {selectedEmployee.user.lastName}
-                <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">
-                  {(employeeHours[selectedEmployee.user.id] ?? 0).toFixed(1)}H
+                <Badge variant="secondary" className="tabular ml-1 px-1.5 py-0 text-[10px]">
+                  {(employeeHours[selectedEmployee.user.id] ?? 0).toFixed(1)} h
                 </Badge>
               </>
             ) : (
               <>
                 Alle Mitarbeiter
-                <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">
-                  {totalHours.toFixed(1)}H
+                <Badge variant="secondary" className="tabular ml-1 px-1.5 py-0 text-[10px]">
+                  {totalHours.toFixed(1)} h
                 </Badge>
               </>
             )}
@@ -170,8 +168,8 @@ export function EmployeeNav({
                 <Users className="size-3" />
               </div>
               <span className="flex-1 text-left">Alle Mitarbeiter</span>
-              <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                {totalHours.toFixed(1)}H
+              <Badge variant="secondary" className="tabular px-1.5 py-0 text-[10px]">
+                {totalHours.toFixed(1)} h
               </Badge>
             </button>
 
@@ -206,9 +204,9 @@ export function EmployeeNav({
                   {hours > 0 && (
                     <Badge
                       variant="secondary"
-                      className="text-[9px] px-1 py-0"
+                      className="tabular px-1.5 py-0 text-[10px]"
                     >
-                      {hours.toFixed(1)}H
+                      {hours.toFixed(1)} h
                     </Badge>
                   )}
                 </button>

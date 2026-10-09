@@ -1,74 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { api, body, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { requireAccess, requireAdmin } from "@/lib/access";
+import { normalizeBranchRights } from "@/lib/access-shared";
+import { refreshRealtime } from "@/lib/emit";
 
-const changeRoleSchema = z.object({
-  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
-});
-
-// PATCH /api/employees/[id]/role - Change role
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isAdminOrAbove(member.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { id } = await params;
-
-  const target = await db.organizationMember.findFirst({
-    where: {
-      id,
-      organizationId: member.organizationId,
-    },
+// PATCH /api/employees/[id]/role - Rolle aendern (nur Admins). Freigaben, die
+// die neue Rolle nicht erlaubt, werden dabei entfernt.
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  return api(async () => {
+    const a = await requireAccess();
+    requireAdmin(a);
+    const { id } = await context.params;
+    const { role } = await body(request, z.object({ role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]) }));
+    const target = await db.organizationMember.findFirst({ where: { id, organizationId: a.orgId } });
+    if (!target) throw new ApiError("Nicht gefunden.", 404);
+    if (target.role === "OWNER") throw new ApiError("Cannot change the owner's role");
+    if (target.userId === a.userId) throw new ApiError("Cannot change your own role");
+    const updated = await db.$transaction(async (tx) => {
+      const member = await tx.organizationMember.update({ where: { id }, data: { role } });
+      for (const grant of await tx.branchAccess.findMany({ where: { memberId: id } })) {
+        const rights = normalizeBranchRights(grant.rights, role);
+        if (rights.length) await tx.branchAccess.update({ where: { id: grant.id }, data: { rights } });
+        else await tx.branchAccess.delete({ where: { id: grant.id } });
+      }
+      if (role !== "MANAGER") await tx.staffAssignment.deleteMany({ where: { managerMemberId: id } });
+      if (role === "ADMIN") await tx.staffAssignment.deleteMany({ where: { employeeMemberId: id } });
+      return member;
+    });
+    await refreshRealtime([target.userId]);
+    return { id: updated.id, role: updated.role };
   });
-
-  if (!target) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  // Cannot change the owner's role
-  if (target.role === "OWNER") {
-    return NextResponse.json(
-      { error: "Cannot change the owner's role" },
-      { status: 400 }
-    );
-  }
-
-  // Cannot change your own role
-  if (target.userId === member.userId) {
-    return NextResponse.json(
-      { error: "Cannot change your own role" },
-      { status: 400 }
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = changeRoleSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const updated = await db.organizationMember.update({
-    where: { id },
-    data: { role: parsed.data.role },
-  });
-
-  return NextResponse.json(updated);
 }

@@ -2,106 +2,68 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutGrid, Table2, User, CalendarDays } from "lucide-react";
+import { LayoutGrid, User, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isoWeek, weekDate } from "@/lib/berlin";
+import { formatKW } from "@/lib/utils/calendar";
 
 interface ViewSwitcherProps {
-  /** Current KW string like "09-2026" or null for month view */
+  /** Aktuelle KW wie "09-2026" (Wochenansichten) */
   kw?: string;
-  /** Current month string like "03-2026" or null for KW views */
+  /** Aktueller Monat wie "03-2026" (Monatsansicht) */
   month?: string;
+  /** Standort des Plans - Planung und Monat gelten je Standort. */
+  standort?: string | null;
 }
 
-const views: {
-  key: string;
-  label: string;
-  icon: typeof LayoutGrid;
-  getHref: (kw: string, month: string) => string;
-}[] = [
-  {
-    key: "flexible",
-    label: "Flexibel",
-    icon: LayoutGrid,
-    getHref: (kw: string, _month: string) => `/schedule/flexible/${kw}`,
-  },
-  {
-    key: "classic",
-    label: "Klassisch",
-    icon: Table2,
-    getHref: (kw: string, _month: string) => `/schedule/classic/${kw}`,
-  },
-  {
-    key: "employee",
-    label: "Mitarbeiter",
-    icon: User,
-    getHref: (kw: string, _month: string) => `/schedule/employee/${kw}`,
-  },
-  {
-    key: "month",
-    label: "Monat",
-    icon: CalendarDays,
-    getHref: (_kw: string, month: string) => `/schedule/month/${month}`,
-  },
-];
-
-/**
- * Derive month string "MM-YYYY" from a KW string "WW-YYYY".
- * Uses the Thursday of the ISO week to determine the month.
- */
+/** Monat "MM-YYYY" zur KW "WW-YYYY" (ueber den Donnerstag der ISO-Woche). */
 function kwToMonth(kw: string): string {
   const match = kw.match(/^(\d{1,2})-(\d{4})$/);
-  if (!match) {
-    const now = new Date();
-    return `${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
-  }
-  const weekNumber = parseInt(match[1], 10);
-  const year = parseInt(match[2], 10);
-  // Jan 4 is always in ISO week 1
-  const jan4 = new Date(year, 0, 4);
-  const dayOfWeek = jan4.getDay() || 7;
-  const startOfWeek1 = new Date(jan4);
-  startOfWeek1.setDate(jan4.getDate() - dayOfWeek + 1);
-  // Thursday of target week
-  const thursday = new Date(startOfWeek1);
-  thursday.setDate(startOfWeek1.getDate() + (weekNumber - 1) * 7 + 3);
-  return `${String(thursday.getMonth() + 1).padStart(2, "0")}-${thursday.getFullYear()}`;
+  if (!match) return "";
+  const thursday = weekDate(Number(match[2]), Number(match[1]), 4);
+  return thursday.slice(5, 7) + "-" + thursday.slice(0, 4);
 }
 
-export function ViewSwitcher({ kw, month }: ViewSwitcherProps) {
+/** KW "WW-YYYY" zum Monat "MM-YYYY" (erste Woche des Monats). */
+function monthToKw(month: string): string {
+  const match = month.match(/^(\d{1,2})-(\d{4})$/);
+  if (!match) return "";
+  const w = isoWeek(match[2] + "-" + match[1].padStart(2, "0") + "-01");
+  return formatKW(w.weekNumber, w.year);
+}
+
+export function ViewSwitcher({ kw, month, standort }: ViewSwitcherProps) {
   const pathname = usePathname();
+  const effectiveKW = kw ?? (month ? monthToKw(month) : "");
+  const effectiveMonth = month ?? (kw ? kwToMonth(kw) : "");
+  const suffix = standort ? "?standort=" + encodeURIComponent(standort) : "";
 
-  // Determine the effective KW and month for link generation
-  const effectiveKW = kw ?? "01-2026";
-  const effectiveMonth = month ?? kwToMonth(effectiveKW);
+  const views = [
+    { key: "flexible", label: "Planung", icon: LayoutGrid, href: `/schedule/flexible/${effectiveKW}${suffix}` },
+    { key: "employee", label: "Mitarbeiter", icon: User, href: `/schedule/employee/${effectiveKW}${suffix}` },
+    { key: "month", label: "Monat", icon: CalendarDays, href: `/schedule/month/${effectiveMonth}${suffix}` },
+  ];
 
-  // Determine active view from current pathname
-  const activeView = pathname.includes("/schedule/classic")
-    ? "classic"
-    : pathname.includes("/schedule/employee")
-      ? "employee"
-      : pathname.includes("/schedule/month")
-        ? "month"
-        : "flexible";
+  const activeView = pathname.includes("/schedule/employee")
+    ? "employee"
+    : pathname.includes("/schedule/month")
+      ? "month"
+      : "flexible";
 
   return (
-    <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+    // Segmentschalter: eine Kante, innen nur Haarlinien.
+    <div role="group" aria-label="Ansicht" className="flex items-center overflow-hidden rounded-[var(--radius)] border bg-card">
       {views.map((view) => {
         const isActive = activeView === view.key;
         const Icon = view.icon;
-        const href =
-          view.key === "month"
-            ? view.getHref(effectiveKW, effectiveMonth)
-            : view.getHref(effectiveKW, effectiveMonth);
-
         return (
           <Link
             key={view.key}
-            href={href}
+            href={view.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-              isActive
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              "flex h-8 items-center gap-1.5 border-l px-3 text-[13px] font-medium transition-colors first:border-l-0",
+              isActive ? "bg-[var(--flaeche-vertieft)] text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <Icon className="size-3.5" />

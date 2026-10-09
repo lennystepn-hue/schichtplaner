@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 
 // GET /api/files?folderId=xxx (null/omit for root)
 export async function GET(request: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

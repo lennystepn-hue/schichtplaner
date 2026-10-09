@@ -1,112 +1,102 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import {
-  CalendarDays,
-  Clock,
-  Users,
-  Building2,
-  MessageSquare,
-  BarChart3,
-  Settings,
-  Sparkles,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useCurrentMember } from "@/lib/hooks/use-current-member";
+import { seitenTitel } from "./nav-config";
 import { UserMenu } from "./user-menu";
-import { MobileNav } from "./mobile-nav";
 import { ConnectionStatus } from "./connection-status";
 
-const navItems = [
-  { key: "schedule", icon: CalendarDays, href: "/schedule/flexible", label: "Schichtplaene" },
-  { key: "time", icon: Clock, href: "/time", label: "Zeiterfassung" },
-  { key: "employees", icon: Users, href: "/employees", label: "Mitarbeiter" },
-  { key: "divisions", icon: Building2, href: "/divisions", label: "Arbeitsbereiche" },
-  { key: "portal", icon: MessageSquare, href: "/portal/inbox", label: "Portal" },
-  { key: "reporting", icon: BarChart3, href: "/reporting", label: "Auswertung" },
-  { key: "settings", icon: Settings, href: "/settings", label: "Einstellungen" },
-] as const;
+/** Weckt die Kopfschiene einmal pro Minute; kein Zustand in Effekten. */
+function abonniereMinute(melden: () => void) {
+  const id = window.setInterval(melden, 20_000);
+  return () => window.clearInterval(id);
+}
 
-export { navItems };
+function minutenStempel(): string {
+  const jetzt = new Date();
+  return `${jetzt.getFullYear()}-${jetzt.getMonth()}-${jetzt.getDate()}-${jetzt.getHours()}-${jetzt.getMinutes()}`;
+}
 
+const datumsFormat = new Intl.DateTimeFormat("de-DE", {
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+});
+
+const zeitFormat = new Intl.DateTimeFormat("de-DE", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** Datum und Uhrzeit der Leitstelle. Vor dem ersten Rendern leer. */
+function Dienstzeit() {
+  const stempel = useSyncExternalStore(
+    abonniereMinute,
+    minutenStempel,
+    () => ""
+  );
+  if (!stempel) return <span className="w-[8.5rem]" aria-hidden="true" />;
+
+  const jetzt = new Date();
+  return (
+    <span className="tabular text-[13px] text-muted-foreground">
+      {datumsFormat.format(jetzt)}
+      <span className="px-1.5 text-border" aria-hidden="true">
+        |
+      </span>
+      <span className="font-medium text-foreground">
+        {zeitFormat.format(jetzt)}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Kopfschiene der Arbeitsoberflaeche. Auf dem Handy traegt sie die
+ * Wortmarke, ab Tablet den Namen des aktuellen Bereichs - die
+ * Navigation selbst steht dann links in der Seitenleiste.
+ */
 export function TopNav() {
   const pathname = usePathname();
-
-  const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ["messages", "unread-count"],
-    queryFn: () => fetch("/api/messages/unread-count").then((r) => r.json()),
-    refetchInterval: 30000,
-  });
-
-  const unreadCount = unreadData?.count ?? 0;
-
-  function isActive(href: string) {
-    const segment = "/" + href.split("/")[1];
-    return pathname.startsWith(segment);
-  }
+  const { data: me } = useCurrentMember();
+  const titel = seitenTitel(pathname, me);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-white dark:bg-slate-900 dark:border-slate-800">
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2 px-4">
-        {/* Mobile hamburger */}
-        <MobileNav />
+    <header className="sticky top-0 z-30 border-b bg-card">
+      {/* Markenlinie: das einzige Farbelement der Kopfschiene. */}
+      <div className="akro-markenlinie h-[2px]" aria-hidden="true" />
 
-        {/* Logo */}
+      <div className="flex h-14 items-center gap-3 px-4 md:px-6 lg:px-8">
         <Link
-          href="/schedule/flexible"
-          className="mr-4 flex items-center gap-2 font-bold text-indigo-600 dark:text-indigo-400"
+          href="/dashboard"
+          className="flex shrink-0 items-center md:hidden"
+          aria-label="AKRO Schichtplaner - zur Startseite"
         >
-          <CalendarDays className="size-5" />
-          <span className="hidden sm:inline">Schichtplaner</span>
+          <Image
+            src="/akro/img/akro-wortmarke.svg"
+            alt=""
+            width={115}
+            height={30}
+            priority
+            className="h-[20px] w-auto"
+          />
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex md:items-center md:gap-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={cn(
-                  "relative flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                )}
-              >
-                <Icon className="size-4" />
-                <span className="hidden lg:inline">{item.label}</span>
-                {item.key === "portal" && unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+        <h2 className="hidden min-w-0 truncate text-[15px] leading-none font-semibold tracking-[-0.02em] md:block">
+          {titel}
+        </h2>
 
-        {/* Right side */}
-        <div className="ml-auto flex items-center gap-2">
-          {/* AI button */}
-          <Link
-            href="/ai/chat"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              pathname.startsWith("/ai")
-                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            )}
-          >
-            <Sparkles className="size-4" />
-            <span className="hidden lg:inline">KI</span>
-          </Link>
-
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden md:block">
+            <Dienstzeit />
+          </span>
           <ConnectionStatus />
-          <UserMenu />
+          <span className="md:hidden">
+            <UserMenu />
+          </span>
         </div>
       </div>
     </header>

@@ -6,7 +6,8 @@ export async function getCurrentMember() {
   if (!session?.user?.id) return null;
 
   return db.organizationMember.findFirst({
-    where: { userId: session.user.id, isActive: true },
+    where: { userId: session.user.id, isActive: true, isActivated: true, organization: { deletedAt: null } },
+    orderBy: { joinedAt: "asc" },
     include: { organization: true, user: true },
   });
 }

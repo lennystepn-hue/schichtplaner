@@ -13,14 +13,12 @@ import {
 
 interface ScheduleSettingsProps {
   nameFormat: string;
-  scheduleVisibility: string;
   onUpdate: (data: Record<string, unknown>) => void;
   isSaving: boolean;
 }
 
 export function ScheduleSettings({
   nameFormat,
-  scheduleVisibility,
   onUpdate,
   isSaving,
 }: ScheduleSettingsProps) {
@@ -64,27 +62,15 @@ export function ScheduleSettings({
 
         <Separator />
 
-        {/* Schedule visibility */}
+        {/* Die fruehere Einstellung "Sichtbarkeit" ist durch Freigaben je Standort ersetzt. */}
         <div className="space-y-2">
           <Label>Sichtbarkeit</Label>
-          <p className="text-xs text-muted-foreground">
-            Welche Schichten koennen Mitarbeiter sehen?
+          <p className="text-sm text-muted-foreground">
+            Mitarbeitende sehen ihre eigenen Schichten. Standortpläne und offene
+            Schichten sehen sie nur mit einer Freigabe für den jeweiligen
+            Standort. Freigaben vergibst du im Profil der Person unter
+            „Freigaben“.
           </p>
-          <Select
-            value={scheduleVisibility}
-            onValueChange={(value) =>
-              onUpdate({ scheduleVisibility: value })
-            }
-            disabled={isSaving}
-          >
-            <SelectTrigger className="w-full max-w-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Alle Schichten</SelectItem>
-              <SelectItem value="OWN_ONLY">Nur eigene Schichten</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </Card>
     </div>

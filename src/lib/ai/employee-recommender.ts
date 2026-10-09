@@ -52,9 +52,9 @@ function timesOverlap(
     return h * 60 + m;
   };
 
-  let aStart = toMin(aFrom);
+  const aStart = toMin(aFrom);
   let aEnd = toMin(aTo);
-  let bStart = toMin(bFrom);
+  const bStart = toMin(bFrom);
   let bEnd = toMin(bTo);
 
   // Handle overnight shifts

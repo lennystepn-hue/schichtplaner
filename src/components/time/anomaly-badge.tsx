@@ -109,8 +109,8 @@ export function AnomalyBadge({ month, isManager }: AnomalyBadgeProps) {
         className={cn(
           "gap-1.5 h-7 px-2",
           hasCritical
-            ? "text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-            : "text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-950/30"
+            ? "text-destructive hover:text-destructive hover:bg-destructive/10 dark:text-destructive dark:hover:bg-destructive/20"
+            : "text-warn hover:text-warn hover:bg-warn/10 dark:text-warn dark:hover:bg-warn/20"
         )}
         onClick={() => setExpanded(!expanded)}
       >
@@ -143,8 +143,8 @@ export function AnomalyBadge({ month, isManager }: AnomalyBadgeProps) {
                 className={cn(
                   "flex items-start gap-3 px-4 py-3 text-sm",
                   anomaly.severity === "critical"
-                    ? "bg-red-50/50 dark:bg-red-950/10"
-                    : "bg-yellow-50/50 dark:bg-yellow-950/10"
+                    ? "bg-destructive/10/50 dark:bg-destructive/20"
+                    : "bg-warn/10/50 dark:bg-warn/20"
                 )}
               >
                 {/* Type icon */}
@@ -152,8 +152,8 @@ export function AnomalyBadge({ month, isManager }: AnomalyBadgeProps) {
                   className={cn(
                     "mt-0.5 shrink-0",
                     anomaly.severity === "critical"
-                      ? "text-red-500"
-                      : "text-yellow-500"
+                      ? "text-destructive"
+                      : "text-warn"
                   )}
                 >
                   {TYPE_ICONS[anomaly.type]}
@@ -174,7 +174,7 @@ export function AnomalyBadge({ month, isManager }: AnomalyBadgeProps) {
                       className={cn(
                         "text-[9px] px-1.5 py-0 shrink-0",
                         anomaly.severity === "warning" &&
-                          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          "bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn"
                       )}
                     >
                       {TYPE_LABELS[anomaly.type]}
@@ -229,8 +229,8 @@ export function EmployeeAnomalyIndicator({
       className={cn(
         "text-[9px] px-1.5 py-0 gap-0.5",
         hasCritical
-          ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-          : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+          ? "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive"
+          : "bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn"
       )}
       title={employeeAnomalies.map((a) => a.details).join("\n")}
     >

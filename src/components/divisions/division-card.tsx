@@ -15,6 +15,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DivisionEditButton } from "./division-form";
@@ -73,12 +74,12 @@ export function DivisionCard({ division, isAdmin }: DivisionCardProps) {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Fehler beim Loeschen");
+        throw new Error(data.error || "Fehler beim Löschen");
       }
       return res.json();
     },
     onSuccess: () => {
-      toast.success("Arbeitsbereich wurde geloescht");
+      toast.success("Arbeitsbereich wurde gelöscht");
       queryClient.invalidateQueries({ queryKey: ["divisions"] });
     },
     onError: (error: Error) => {
@@ -112,18 +113,14 @@ export function DivisionCard({ division, isAdmin }: DivisionCardProps) {
     },
   });
 
+  const [loeschOffen, setLoeschOffen] = useState(false);
+
   function handleDelete() {
-    if (
-      !window.confirm(
-        `Arbeitsbereich "${division.title}" wirklich loeschen?`
-      )
-    ) {
-      return;
-    }
-    deleteMutation.mutate();
+    setLoeschOffen(true);
   }
 
   return (
+    <>
     <Card className="overflow-hidden">
       {/* Color accent - top bar */}
       <div className="h-1.5" style={{ backgroundColor: division.color }} />
@@ -266,5 +263,14 @@ export function DivisionCard({ division, isAdmin }: DivisionCardProps) {
         )}
       </div>
     </Card>
+      <ConfirmDialog
+        open={loeschOffen}
+        onOpenChange={setLoeschOffen}
+        title="Arbeitsbereich löschen"
+        description={`"${division.title}" wird gelöscht. Schichten behalten ihre Daten, verlieren aber die Zuordnung zu diesem Bereich.`}
+        confirmLabel="Löschen"
+        onConfirm={() => deleteMutation.mutate()}
+      />
+    </>
   );
 }

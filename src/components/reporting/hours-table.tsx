@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExportModal } from "./export-modal";
+import { json, selectClass } from "@/components/workforce/client";
 
 // ---------- Types ----------
 
@@ -46,6 +47,10 @@ type EmployeeReport = {
   lastName: string;
   profileImage: string | null;
   totalMinutes: number;
+  plannedMinutes: number;
+  /** Sollstunden: nur eigene und - fuer Admins - alle; nicht in der Standortansicht. */
+  targetMinutes: number | null;
+  deviationMinutes: number;
   shiftCount: number;
   kwBreakdown: KWData[];
 };
@@ -94,16 +99,24 @@ const MONTH_NAMES_DISPLAY = [
 ];
 
 function formatMinutes(totalMinutes: number): string {
+  totalMinutes = Math.round(totalMinutes);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return `${h}H${m > 0 ? ` ${m}M` : ""}`;
 }
 
 function formatMinutesCompact(totalMinutes: number): string {
+  totalMinutes = Math.round(totalMinutes);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   if (m === 0) return `${h}H`;
   return `${h}H${String(m).padStart(2, "0")}M`;
+}
+
+type BranchOption = { id: string; name: string; customer: { name: string } | null };
+
+function stunden(minutes: number | null): string {
+  return minutes === null ? "–" : (minutes / 60).toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " h";
 }
 
 type SortField = "name" | "total";
@@ -123,12 +136,19 @@ export function HoursTable({ month, year }: HoursTableProps) {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [showExport, setShowExport] = useState(false);
+  // Standortfilter: nur Standorte mit "Zeiterfassung einsehen" (Admins: alle)
+  const [standort, setStandort] = useState("");
+  const { data: branchData } = useQuery({
+    queryKey: ["branches", "VIEW_TIME"],
+    queryFn: () => json<{ branches: BranchOption[] }>("/api/branches?right=VIEW_TIME"),
+  });
+  const branches = branchData?.branches ?? [];
 
   // Fetch reporting data
   const { data, isLoading, error } = useQuery<ReportingResponse>({
-    queryKey: ["reporting", month, year],
+    queryKey: ["reporting", month, year, standort],
     queryFn: async () => {
-      const res = await fetch(`/api/reporting?month=${month}&year=${year}`);
+      const res = await fetch(`/api/reporting?month=${month}&year=${year}${standort ? "&standort=" + encodeURIComponent(standort) : ""}`);
       if (!res.ok) throw new Error("Fehler beim Laden der Auswertung");
       return res.json();
     },
@@ -223,7 +243,7 @@ export function HoursTable({ month, year }: HoursTableProps) {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Auswertung</h1>
+          <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Auswertung</h1>
           <p className="text-sm text-muted-foreground">
             Monatliche Stundenauswertung und Export
           </p>
@@ -275,7 +295,7 @@ export function HoursTable({ month, year }: HoursTableProps) {
                   <Badge
                     key={kw.weekNumber}
                     variant="secondary"
-                    className="tabular-nums font-mono text-xs cursor-default"
+                    className="tabular text-xs cursor-default"
                   >
                     {kw.label} {formatMinutesCompact(minutes)}
                   </Badge>
@@ -286,16 +306,32 @@ export function HoursTable({ month, year }: HoursTableProps) {
         </Card>
       )}
 
-      {/* Search */}
-      <div className="relative w-full sm:max-w-xs">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Mitarbeiter suchen..."
-          className="pl-9"
-        />
+      {/* Search + Standort */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Mitarbeiter suchen..."
+            className="pl-9"
+          />
+        </div>
+        {branches.length > 0 && (
+          <label className="flex items-center gap-2 text-sm sm:ml-auto">
+            <span className="shrink-0 text-muted-foreground">Standort</span>
+            <select className={cn(selectClass, "sm:w-64")} value={standort} onChange={(e) => setStandort(e.target.value)}>
+              <option value="">Alle freigegebenen Standorte</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}{b.customer ? " · " + b.customer.name : ""}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+      {standort && (
+        <p className="text-xs text-muted-foreground">Nur Zeiten und Schichten an diesem Standort. Sollstunden gelten standortübergreifend und sind hier ausgeblendet.</p>
+      )}
 
       {/* Loading */}
       {isLoading && <ReportingSkeleton />}
@@ -367,6 +403,9 @@ export function HoursTable({ month, year }: HoursTableProps) {
                       />
                     </button>
                   </TableHead>
+                  <TableHead className="text-right">Plan</TableHead>
+                  <TableHead className="text-right">Soll</TableHead>
+                  <TableHead className="text-right">Ist − Plan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -380,7 +419,7 @@ export function HoursTable({ month, year }: HoursTableProps) {
                       return (
                         <TableCell
                           key={kw.weekNumber}
-                          className="text-center tabular-nums font-mono text-sm"
+                          className="text-center tabular text-sm"
                         >
                           {minutes > 0 ? (
                             <span className="text-foreground">
@@ -392,11 +431,14 @@ export function HoursTable({ month, year }: HoursTableProps) {
                         </TableCell>
                       );
                     })}
-                    <TableCell className="text-right tabular-nums font-mono text-sm font-semibold">
+                    <TableCell className="text-right tabular text-sm font-semibold">
                       {emp.totalMinutes > 0
                         ? formatMinutesCompact(emp.totalMinutes)
                         : "-"}
                     </TableCell>
+                    <TableCell className="tabular text-right">{stunden(emp.plannedMinutes)}</TableCell>
+                    <TableCell className="tabular text-right">{stunden(emp.targetMinutes)}</TableCell>
+                    <TableCell className="tabular text-right">{stunden(emp.deviationMinutes)}</TableCell>
                   </TableRow>
                 ))}
 
@@ -409,15 +451,16 @@ export function HoursTable({ month, year }: HoursTableProps) {
                     return (
                       <TableCell
                         key={kw.weekNumber}
-                        className="text-center tabular-nums font-mono text-sm"
+                        className="text-center tabular text-sm"
                       >
                         {minutes > 0 ? formatMinutesCompact(minutes) : "-"}
                       </TableCell>
                     );
                   })}
-                  <TableCell className="text-right tabular-nums font-mono text-sm">
+                  <TableCell className="text-right tabular text-sm">
                     {formatMinutesCompact(totals.totalMinutes)}
                   </TableCell>
+                  <TableCell colSpan={3} />
                 </TableRow>
               </TableBody>
             </Table>
@@ -441,6 +484,7 @@ export function HoursTable({ month, year }: HoursTableProps) {
         onOpenChange={setShowExport}
         defaultMonth={month}
         defaultYear={year}
+        standort={standort || null}
       />
     </div>
   );

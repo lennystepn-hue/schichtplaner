@@ -30,48 +30,52 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-interface Employee {
+/** Moegliche Empfaenger - der Server liefert nur Personen, die man sehen darf. */
+interface Recipient {
   id: string;
+  firstName: string;
+  lastName: string;
+  profileImage: string | null;
   role: string;
-  user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    profileImage: string | null;
-  };
 }
 
+const rollen: Record<string, string> = { OWNER: "Inhaber", ADMIN: "Administration", MANAGER: "Manager" };
+
 interface Props {
+  shiftId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultRecipientIds?: string[];
   defaultSubject?: string;
 }
 
-export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaultSubject }: Props) {
+export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaultSubject, shiftId }: Props) {
   const queryClient = useQueryClient();
   const [recipientIds, setRecipientIds] = useState<string[]>(defaultRecipientIds ?? []);
   const [subject, setSubject] = useState(defaultSubject ?? "");
   const [body, setBody] = useState("");
   const [recipientPickerOpen, setRecipientPickerOpen] = useState(false);
 
-  const { data: employeesData } = useQuery<{ members: Employee[] }>({
-    queryKey: ["employees", "all"],
-    queryFn: () => fetch("/api/employees?status=all").then((r) => r.json()),
+  const { data: recipientData } = useQuery<{ recipients: Recipient[] }>({
+    queryKey: ["message-recipients"],
+    queryFn: async () => {
+      const res = await fetch("/api/messages/recipients");
+      if (!res.ok) throw new Error("Empfänger konnten nicht geladen werden.");
+      return res.json();
+    },
     enabled: open,
   });
 
-  const employees = employeesData?.members ?? [];
+  const employees = recipientData?.recipients ?? [];
 
   const sendMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, body, recipientIds }),
+        body: JSON.stringify({ subject, body, recipientIds, shiftId }),
       });
-      if (!res.ok) throw new Error("Failed to send");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Fehler beim Senden");
       return res.json();
     },
     onSuccess: () => {
@@ -80,8 +84,8 @@ export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaul
       resetForm();
       onOpenChange(false);
     },
-    onError: () => {
-      toast.error("Fehler beim Senden");
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 
@@ -101,7 +105,7 @@ export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaul
     setRecipientIds((prev) => prev.filter((id) => id !== userId));
   }
 
-  const selectedEmployees = employees.filter((e) => recipientIds.includes(e.user.id));
+  const selectedEmployees = employees.filter((e) => recipientIds.includes(e.id));
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
@@ -114,22 +118,24 @@ export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaul
           {/* Recipients */}
           <div>
             <Label>Empfaenger</Label>
+            {employees.length > 1 && <Button type="button" size="sm" variant="ghost" onClick={() => setRecipientIds(employees.map(e => e.id))}>Alle {employees.length} auswählen</Button>}
             <div className="mt-1.5">
               <Popover open={recipientPickerOpen} onOpenChange={setRecipientPickerOpen}>
                 <PopoverTrigger asChild>
-                  <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 cursor-pointer hover:border-indigo-400 dark:border-slate-700">
+                  <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border px-3 py-2 cursor-pointer hover:border-primary/40">
                     {selectedEmployees.length === 0 ? (
-                      <span className="text-sm text-slate-400">Empfaenger auswaehlen...</span>
+                      <span className="text-sm text-muted-foreground">Empfaenger auswaehlen...</span>
                     ) : (
                       selectedEmployees.map((emp) => (
-                        <Badge key={emp.user.id} variant="secondary" className="gap-1">
-                          {emp.user.firstName} {emp.user.lastName}
+                        <Badge key={emp.id} variant="secondary" className="gap-1">
+                          {emp.firstName} {emp.lastName}
                           <button
+                            aria-label={`${emp.firstName} ${emp.lastName} entfernen`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              removeRecipient(emp.user.id);
+                              removeRecipient(emp.id);
                             }}
-                            className="ml-0.5 hover:text-red-500"
+                            className="ml-0.5 hover:text-destructive"
                           >
                             <X className="size-3" />
                           </button>
@@ -142,25 +148,25 @@ export function ComposeMessage({ open, onOpenChange, defaultRecipientIds, defaul
                   <Command>
                     <CommandInput placeholder="Mitarbeiter suchen..." />
                     <CommandList>
-                      <CommandEmpty>Kein Mitarbeiter gefunden.</CommandEmpty>
+                      <CommandEmpty>Keine passende Person.</CommandEmpty>
                       <CommandGroup>
                         {employees.map((emp) => (
                           <CommandItem
-                            key={emp.user.id}
-                            value={`${emp.user.firstName} ${emp.user.lastName} ${emp.user.email}`}
-                            onSelect={() => toggleRecipient(emp.user.id)}
+                            key={emp.id}
+                            value={`${emp.firstName} ${emp.lastName} ${emp.id}`}
+                            onSelect={() => toggleRecipient(emp.id)}
                           >
                             <Check
                               className={cn(
                                 "mr-2 size-4",
-                                recipientIds.includes(emp.user.id) ? "opacity-100" : "opacity-0"
+                                recipientIds.includes(emp.id) ? "opacity-100" : "opacity-0"
                               )}
                             />
                             <div>
                               <div className="text-sm font-medium">
-                                {emp.user.firstName} {emp.user.lastName}
+                                {emp.firstName} {emp.lastName}
                               </div>
-                              <div className="text-xs text-slate-500">{emp.user.email}</div>
+                              {rollen[emp.role] && <div className="text-xs text-muted-foreground">{rollen[emp.role]}</div>}
                             </div>
                           </CommandItem>
                         ))}

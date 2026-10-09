@@ -40,7 +40,7 @@ export function PortalSidebar() {
       <nav className="space-y-6">
         {/* Messages section */}
         <div>
-          <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Nachrichten
           </h3>
           <ul className="space-y-0.5">
@@ -54,8 +54,8 @@ export function PortalSidebar() {
                     className={cn(
                       "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       active
-                        ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        ? "bg-accent text-primary dark:text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-muted-foreground dark:hover:bg-card dark:hover:text-muted-foreground"
                     )}
                   >
                     <Icon className="size-4" />
@@ -74,7 +74,7 @@ export function PortalSidebar() {
 
         {/* Portal section */}
         <div>
-          <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <h3 className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Portal
           </h3>
           <ul className="space-y-0.5">
@@ -88,8 +88,8 @@ export function PortalSidebar() {
                     className={cn(
                       "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       active
-                        ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        ? "bg-accent text-primary dark:text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-muted-foreground dark:hover:bg-card dark:hover:text-muted-foreground"
                     )}
                   >
                     <Icon className="size-4" />

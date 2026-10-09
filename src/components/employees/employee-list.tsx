@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { EmployeeForm } from "./employee-form";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
+import { STAFF_RIGHTS } from "@/lib/access-shared";
 
 type Employee = {
   id: string;
@@ -40,11 +41,14 @@ type Employee = {
     id: string;
     firstName: string;
     lastName: string;
-    email: string;
+    // Kontaktdaten nur mit "Personalprofil ansehen" (sonst null).
+    email: string | null;
     phone: string | null;
     nickname: string | null;
     profileImage: string | null;
   };
+  /** Personalrechte der angemeldeten Person fuer diese Person; null fuer Admins. */
+  rights: string[] | null;
 };
 
 type EmployeeResponse = {
@@ -80,19 +84,19 @@ function getRoleBadge(role: string) {
   switch (role) {
     case "OWNER":
       return (
-        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+        <Badge className="bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn">
           Owner
         </Badge>
       );
     case "ADMIN":
       return (
-        <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+        <Badge className="bg-accent text-primary">
           Admin
         </Badge>
       );
     case "MANAGER":
       return (
-        <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+        <Badge className="bg-ok/10 text-ok dark:bg-ok/20 dark:text-ok">
           Manager
         </Badge>
       );
@@ -107,8 +111,10 @@ export function EmployeeList() {
   const router = useRouter();
   const { data: currentMember } = useCurrentMember();
 
-  const isAdmin =
-    currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
+  const isAdmin = !!currentMember?.access.isAdmin;
+  // Das Profil oeffnet sich nur, wo der Server es auch ausliefert.
+  const profil = (emp: Employee) => emp.rights === null || emp.rights.includes("VIEW_PROFILE");
+  const rechte = (emp: Employee) => (emp.rights ?? []).map((r) => STAFF_RIGHTS.find((x) => x.key === r)?.label ?? r).join(" · ");
 
   const queryParams = new URLSearchParams();
   if (search) queryParams.set("search", search);
@@ -134,9 +140,9 @@ export function EmployeeList() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Mitarbeiter</h1>
+          <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Mitarbeiter</h1>
           <p className="text-sm text-muted-foreground">
-            Verwalte dein Team und weise Rollen zu
+            {isAdmin ? "Verwalte dein Team und weise Rollen zu" : "Dir zugeordnete Mitarbeitende und deine Rechte"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -159,13 +165,13 @@ export function EmployeeList() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Suche nach Name oder E-Mail..."
+            placeholder={isAdmin ? "Suche nach Name oder E-Mail..." : "Suche nach Name..."}
             className="pl-9"
           />
         </div>
 
         <div className="flex flex-wrap gap-1">
-          {tabs.map((tab) => {
+          {tabs.filter((tab) => isAdmin || tab.key !== "admin").map((tab) => {
             const Icon = tab.icon;
             const count = data?.counts?.[tab.key] ?? 0;
             const active = activeTab === tab.key;
@@ -176,7 +182,7 @@ export function EmployeeList() {
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                    ? "bg-accent text-primary dark:text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
@@ -209,7 +215,9 @@ export function EmployeeList() {
           <p className="text-sm text-muted-foreground mt-1">
             {search
               ? "Versuche eine andere Suche."
-              : "Lege deinen ersten Mitarbeiter an."}
+              : isAdmin
+                ? "Lege deinen ersten Mitarbeiter an."
+                : "Dir sind noch keine Mitarbeitenden zugeordnet. Zuordnungen vergibt die Administration."}
           </p>
         </Card>
       )}
@@ -223,6 +231,7 @@ export function EmployeeList() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>E-Mail</TableHead>
+                  {!isAdmin && <TableHead>Deine Rechte</TableHead>}
                   <TableHead>Rolle</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -231,8 +240,8 @@ export function EmployeeList() {
                 {data.members.map((emp) => (
                   <TableRow
                     key={emp.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/employees/${emp.id}`)}
+                    className={cn(profil(emp) && "cursor-pointer")}
+                    onClick={profil(emp) ? () => router.push(`/employees/${emp.id}`) : undefined}
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -260,8 +269,13 @@ export function EmployeeList() {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {emp.user.email}
+                      {emp.user.email ?? "–"}
                     </TableCell>
+                    {!isAdmin && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {rechte(emp)}
+                      </TableCell>
+                    )}
                     <TableCell>{getRoleBadge(emp.role)}</TableCell>
                     <TableCell>
                       {!emp.isActive ? (
@@ -269,7 +283,7 @@ export function EmployeeList() {
                       ) : !emp.isActivated ? (
                         <Badge
                           variant="outline"
-                          className="border-amber-500 text-amber-600"
+                          className="border-warn/40 text-warn"
                         >
                           <AlertTriangle className="size-3" />
                           Nicht freigeschaltet
@@ -277,7 +291,7 @@ export function EmployeeList() {
                       ) : (
                         <Badge
                           variant="outline"
-                          className="border-emerald-500 text-emerald-600"
+                          className="border-ok/40 text-ok"
                         >
                           Aktiv
                         </Badge>
@@ -294,8 +308,8 @@ export function EmployeeList() {
             {data.members.map((emp) => (
               <Card
                 key={emp.id}
-                className="cursor-pointer p-4 transition-colors hover:bg-muted/50"
-                onClick={() => router.push(`/employees/${emp.id}`)}
+                className={cn("p-4", profil(emp) && "cursor-pointer transition-colors hover:bg-muted/50")}
+                onClick={profil(emp) ? () => router.push(`/employees/${emp.id}`) : undefined}
               >
                 <div className="flex items-center gap-3">
                   <Avatar size="default">
@@ -314,14 +328,14 @@ export function EmployeeList() {
                       {getRoleBadge(emp.role)}
                     </div>
                     <div className="text-sm text-muted-foreground truncate">
-                      {emp.user.email}
+                      {isAdmin ? emp.user.email : rechte(emp)}
                     </div>
                   </div>
                   <div>
                     {!emp.isActive ? (
                       <Badge variant="destructive">Inaktiv</Badge>
                     ) : !emp.isActivated ? (
-                      <AlertTriangle className="size-4 text-amber-500" />
+                      <AlertTriangle className="size-4 text-warn" />
                     ) : null}
                   </div>
                 </div>

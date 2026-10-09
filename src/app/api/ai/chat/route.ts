@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getCurrentMember } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { isAIFeatureEnabled, AIError } from "@/lib/ai/client";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
 import { chatTools, executeTool } from "@/lib/ai/chat-tools";
@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Die Werkzeuge fragen organisationsweit ab - nur fuer die Administration.
+  if (!isAdminOrAbove(member.role)) {
+    return NextResponse.json({ error: "Keine Berechtigung." }, { status: 403 });
   }
 
   // Check feature flag

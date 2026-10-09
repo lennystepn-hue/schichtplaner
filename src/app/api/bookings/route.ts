@@ -1,218 +1,58 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
-import { emitToOrg, emitToSchedule } from "@/lib/emit";
+import { api, body, requireMember, serial, ApiError } from "@/lib/api";
+import { assertCan, requireAccess } from "@/lib/access";
+import { assign, assignableUserIds, notify } from "@/lib/planning";
+import { emitToBranch } from "@/lib/emit";
 
-const bookingSchema = z.object({
-  shiftId: z.string().min(1),
-  userId: z.string().min(1),
-});
+const input = z.object({ shiftId: z.string().min(1), userId: z.string().min(1) });
 
-/**
- * POST /api/bookings
- *
- * Book an employee into a shift.
- * Manager+ can book anyone, employees can only book themselves.
- */
-export async function POST(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = bookingSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const { shiftId, userId } = parsed.data;
-
-  // Employees can only book themselves
-  if (!isManagerOrAbove(member.role) && userId !== member.user.id) {
-    return NextResponse.json(
-      { error: "Mitarbeiter koennen nur sich selbst buchen" },
-      { status: 403 }
-    );
-  }
-
-  // Verify shift exists and belongs to the user's org
-  const shift = await db.shift.findFirst({
-    where: { id: shiftId, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-      bookings: true,
-    },
+/** Besetzen: Recht "Schichten bearbeiten" am Standort und - fuer Manager - eine Zuordnung mit "Einplanen". */
+export async function POST(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const data = await body(request, input);
+    const { booking, shift } = await serial(async tx => {
+      const target = await tx.shift.findFirst({ where: { id: data.shiftId, deletedAt: null, schedule: { organizationId: a.orgId, deletedAt: null } }, include: { schedule: true } });
+      if (!target) throw new ApiError("Schicht nicht gefunden.", 404);
+      assertCan(a, "EDIT_SHIFTS", target.schedule.branchId);
+      const allowed = assignableUserIds(a);
+      if (allowed && !allowed.includes(data.userId)) throw new ApiError("Diese Person ist dir nicht zum Einplanen zugeordnet.", 403);
+      return assign(tx, a, data.shiftId, data.userId);
+    });
+    emitToBranch(a.orgId, shift.schedule.branchId, "booking:changed", [data.userId]);
+    return { booking };
   });
-
-  if (!shift || shift.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Schicht nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  // Verify the target user is a member of the same org
-  const targetMember = await db.organizationMember.findFirst({
-    where: {
-      organizationId: member.organizationId,
-      userId,
-      isActive: true,
-    },
-  });
-
-  if (!targetMember) {
-    return NextResponse.json(
-      { error: "Mitarbeiter nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  // Check shift isn't full
-  if (shift.bookings.length >= shift.maxEmployees) {
-    return NextResponse.json(
-      { error: "Schicht ist voll" },
-      { status: 409 }
-    );
-  }
-
-  // Check employee not already booked in this shift
-  const existingBooking = shift.bookings.find((b) => b.userId === userId);
-  if (existingBooking) {
-    return NextResponse.json(
-      { error: "Mitarbeiter ist bereits in dieser Schicht gebucht" },
-      { status: 409 }
-    );
-  }
-
-  // Create the booking
-  const booking = await db.booking.create({
-    data: {
-      shiftId,
-      userId,
-      bookedBy: member.user.id,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          nickname: true,
-          profileImage: true,
-        },
-      },
-    },
-  });
-
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "booked",
-  });
-  emitToSchedule(shift.scheduleId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "booked",
-  });
-
-  return NextResponse.json({ booking }, { status: 201 });
 }
 
-/**
- * DELETE /api/bookings
- *
- * Unbook an employee from a shift.
- * Manager+ can unbook anyone, employees can only unbook themselves.
- */
-export async function DELETE(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = bookingSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const { shiftId, userId } = parsed.data;
-
-  // Employees can only unbook themselves
-  if (!isManagerOrAbove(member.role) && userId !== member.user.id) {
-    return NextResponse.json(
-      { error: "Mitarbeiter koennen nur sich selbst abbuchen" },
-      { status: 403 }
-    );
-  }
-
-  // Verify shift belongs to the user's org
-  const shift = await db.shift.findFirst({
-    where: { id: shiftId, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
+export async function DELETE(request: Request) {
+  return api(async () => {
+    const a = await requireAccess();
+    const data = await body(request, input);
+    const branchId = await serial(async tx => {
+      const booking = await tx.booking.findFirst({ where: { ...data, shift: { schedule: { organizationId: a.orgId } } }, include: { shift: { include: { schedule: true } } } });
+      if (!booking) throw new ApiError("Zuweisung nicht gefunden.", 404);
+      assertCan(a, "EDIT_SHIFTS", booking.shift.schedule.branchId);
+      await tx.booking.delete({ where: { id: booking.id } });
+      if (booking.shift.schedule.isPublic) await notify(tx, a.orgId, a.userId, [data.userId], "Schichtzuweisung aufgehoben", "Deine Zuweisung wurde aufgehoben.", data.shiftId);
+      return booking.shift.schedule.branchId;
+    });
+    emitToBranch(a.orgId, branchId, "booking:changed", [data.userId]);
+    return { success: true };
   });
+}
 
-  if (!shift || shift.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Schicht nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  // Find and delete the booking
-  const booking = await db.booking.findUnique({
-    where: { shiftId_userId: { shiftId, userId } },
+/** Eigene, veroeffentlichte Schicht bestaetigen. */
+export async function PATCH(request: Request) {
+  return api(async () => {
+    const member = await requireMember();
+    const data = await body(request, z.object({ shiftId: z.string() }));
+    const result = await serial(async tx => {
+      const booking = await tx.booking.findFirst({ where: { shiftId: data.shiftId, userId: member.userId, shift: { deletedAt: null, schedule: { organizationId: member.organizationId, isPublic: true, deletedAt: null } } }, include: { shift: { include: { schedule: true } } } });
+      if (!booking) throw new ApiError("Schicht nicht gefunden.", 404);
+      const updated = await tx.booking.update({ where: { id: booking.id }, data: { confirmedAt: new Date() } });
+      return { booking: updated, branchId: booking.shift.schedule.branchId };
+    });
+    emitToBranch(member.organizationId, result.branchId, "booking:changed", [member.userId]);
+    return { booking: { id: result.booking.id, shiftId: result.booking.shiftId, userId: result.booking.userId, confirmedAt: result.booking.confirmedAt } };
   });
-
-  if (!booking) {
-    return NextResponse.json(
-      { error: "Buchung nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  await db.booking.delete({
-    where: { id: booking.id },
-  });
-
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "unbooked",
-  });
-  emitToSchedule(shift.scheduleId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "unbooked",
-  });
-
-  return NextResponse.json({ success: true });
 }

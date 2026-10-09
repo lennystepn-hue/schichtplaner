@@ -22,6 +22,11 @@
     "open-source"
   ],
   "scripts": {
+    "test:workflows": "tsx tests/workflows.ts",
+    "test:migration": "tsx tests/migration.ts",
+    "test:migration:copy": "tsx tests/migration-copy.ts",
+    "test:load:pilot": "tsx tests/load-pilot.ts",
+    "test:load:seed": "tsx tests/seed-load-pilot.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -66,6 +71,8 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.15",
+    "@electric-sql/pglite-socket": "0.0.20",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.35",

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -124,9 +126,10 @@ export function AccountSettings({
                   size="sm"
                   disabled={deleteInput !== "LOESCHEN"}
                   onClick={() => {
-                    // placeholder - not implemented
-                    alert(
-                      "Deine Anfrage wurde gesendet. Ein Admin wird sich bei dir melden."
+                    // Noch nicht umgesetzt: ehrlich melden statt Erfolg
+                    // vorzutaeuschen.
+                    toast.info(
+                      "Loeschung ist noch nicht eingerichtet. Bitte wende dich an die Administration."
                     );
                     setShowDeleteConfirm(false);
                     setDeleteInput("");

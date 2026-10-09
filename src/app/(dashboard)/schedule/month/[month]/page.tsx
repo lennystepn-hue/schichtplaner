@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { ViewSwitcher } from "@/components/schedule/view-switcher";
 import { MonthGridWrapper } from "@/components/schedule/month-grid-wrapper";
-import { getCurrentKW, formatKW } from "@/lib/utils/calendar";
 
 interface MonthPageProps {
   params: Promise<{ month: string }>;
+  searchParams: Promise<{ standort?: string; offen?: string }>;
 }
 
 function parseMonth(str: string): { month: number; year: number } | null {
@@ -16,28 +16,26 @@ function parseMonth(str: string): { month: number; year: number } | null {
   return { month, year };
 }
 
-export default async function MonthViewPage({ params }: MonthPageProps) {
+/** Monatsdienstplan eines Standorts; ohne Standort die Auswahl der freigegebenen Standorte. */
+export default async function MonthViewPage({ params, searchParams }: MonthPageProps) {
   const { month: monthParam } = await params;
+  const { standort, offen } = await searchParams;
   const parsed = parseMonth(monthParam);
 
   if (!parsed) {
     const now = new Date();
     const m = String(now.getMonth() + 1).padStart(2, "0");
-    redirect(`/schedule/month/${m}-${now.getFullYear()}`);
+    redirect(`/schedule/month/${m}-${now.getFullYear()}${standort ? "?standort=" + encodeURIComponent(standort) : ""}`);
   }
-
-  const { month, year } = parsed;
-
-  // Derive a KW for the view switcher from this month (use first day of month)
-  const currentKW = getCurrentKW();
-  const kw = formatKW(currentKW.weekNumber, currentKW.year);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <ViewSwitcher kw={kw} month={monthParam} />
-      </div>
-      <MonthGridWrapper month={month} year={year} />
+      {standort && (
+        <div className="flex items-center justify-end">
+          <ViewSwitcher month={monthParam} standort={standort} />
+        </div>
+      )}
+      <MonthGridWrapper month={parsed.month} year={parsed.year} standort={standort ?? null} offen={offen === "1"} />
     </div>
   );
 }

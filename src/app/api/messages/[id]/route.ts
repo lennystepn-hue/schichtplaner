@@ -1,142 +1,56 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { api, body, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getCurrentMember } from "@/lib/auth-helpers";
+import { requireAccess, visiblePeople } from "@/lib/access";
+import { recipientsFor } from "@/lib/messages";
 
-// GET /api/messages/[id] — get message detail + mark as read
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+type Context = { params: Promise<{ id: string }> };
+const person = { select: { id: true, firstName: true, lastName: true, profileImage: true } } as const;
 
-  const { id } = await params;
-
-  const message = await db.message.findFirst({
-    where: {
-      id,
-      organizationId: member.organizationId,
-      OR: [
-        { senderId: member.user.id },
-        { recipients: { some: { userId: member.user.id } } },
-      ],
-    },
-    include: {
-      sender: {
-        select: { id: true, firstName: true, lastName: true, profileImage: true },
+// GET /api/messages/[id] - Nachricht mit Antworten; als gelesen markieren
+export async function GET(_request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { id } = await context.params;
+    const involved = { OR: [{ senderId: a.userId }, { recipients: { some: { userId: a.userId } } }] };
+    const message = await db.message.findFirst({
+      where: { id, organizationId: a.orgId, ...involved },
+      include: {
+        sender: person,
+        recipients: { include: { user: person } },
+        // Im Verlauf nur Antworten, an denen die Person selbst beteiligt ist.
+        replies: { where: involved, include: { sender: person }, orderBy: { createdAt: "asc" } },
       },
-      recipients: {
-        include: {
-          user: {
-            select: { id: true, firstName: true, lastName: true, profileImage: true },
-          },
-        },
-      },
-      replies: {
-        include: {
-          sender: {
-            select: { id: true, firstName: true, lastName: true, profileImage: true },
-          },
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
-
-  if (!message) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  // Mark as read if user is a recipient
-  await db.messageRecipient.updateMany({
-    where: { messageId: id, userId: member.user.id },
-    data: { isRead: true },
-  });
-
-  return NextResponse.json({ message });
-}
-
-// PATCH /api/messages/[id] — mark read/unread, trash, restore
-const patchSchema = z.object({
-  isRead: z.boolean().optional(),
-  isDeleted: z.boolean().optional(),
-});
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const data: Record<string, boolean> = {};
-  if (parsed.data.isRead !== undefined) data.isRead = parsed.data.isRead;
-  if (parsed.data.isDeleted !== undefined) data.isDeleted = parsed.data.isDeleted;
-
-  const updated = await db.messageRecipient.updateMany({
-    where: { messageId: id, userId: member.user.id },
-    data,
-  });
-
-  if (updated.count === 0) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ success: true });
-}
-
-// DELETE /api/messages/[id] — permanently delete
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { id } = await params;
-
-  // Only sender can permanently delete, or recipient removes their copy
-  const message = await db.message.findFirst({
-    where: { id, organizationId: member.organizationId },
-  });
-
-  if (!message) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  if (message.senderId === member.user.id) {
-    // Sender deletes — remove the whole message
-    await db.message.delete({ where: { id } });
-  } else {
-    // Recipient deletes their copy permanently
-    await db.messageRecipient.deleteMany({
-      where: { messageId: id, userId: member.user.id },
     });
-  }
+    if (!message) throw new ApiError("Not found", 404);
+    await db.messageRecipient.updateMany({ where: { messageId: id, userId: a.userId }, data: { isRead: true } });
+    return { message: { ...message, ...recipientsFor(message.recipients, await visiblePeople(a), a.userId) } };
+  });
+}
 
-  return NextResponse.json({ success: true });
+const patchSchema = z.object({ isRead: z.boolean().optional(), isDeleted: z.boolean().optional() });
+
+// PATCH /api/messages/[id] - gelesen/ungelesen, Papierkorb
+export async function PATCH(request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { id } = await context.params;
+    const data = await body(request, patchSchema);
+    const updated = await db.messageRecipient.updateMany({ where: { messageId: id, userId: a.userId, message: { organizationId: a.orgId } }, data });
+    if (!updated.count) throw new ApiError("Not found", 404);
+    return { success: true };
+  });
+}
+
+// DELETE /api/messages/[id] - Absender loescht die Nachricht, Empfaenger ihre Kopie
+export async function DELETE(_request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const { id } = await context.params;
+    const message = await db.message.findFirst({ where: { id, organizationId: a.orgId, OR: [{ senderId: a.userId }, { recipients: { some: { userId: a.userId } } }] } });
+    if (!message) throw new ApiError("Not found", 404);
+    if (message.senderId === a.userId) await db.message.delete({ where: { id } });
+    else await db.messageRecipient.deleteMany({ where: { messageId: id, userId: a.userId } });
+    return { success: true };
+  });
 }

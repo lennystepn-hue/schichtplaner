@@ -1,144 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { api, body, requireMember, serial, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getCurrentMember } from "@/lib/auth-helpers";
-import { emitToOrg } from "@/lib/emit";
-import { format } from "date-fns";
-
-const watchActionSchema = z.object({
-  action: z.enum(["START", "STOP"]),
-  categoryId: z.string().optional(),
-  comment: z.string().optional(),
-});
-
-// GET /api/time/watch — get current running watch for this user
+import { berlinDate, berlinTime } from "@/lib/berlin";
+import { branchForTime } from "@/lib/time-service";
 export async function GET() {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // A running watch has type=WATCH, timeTo=null
-  const running = await db.timeRecord.findFirst({
-    where: {
-      userId: member.user.id,
-      type: "WATCH",
-      timeTo: null,
-    },
-    include: {
-      category: { select: { id: true, name: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json({ running });
+  return api(async () => { const m = await requireMember(); return { running: await db.timeRecord.findFirst({ where: { organizationId: m.organizationId, userId: m.userId, type: "WATCH", timeTo: null }, include: { category: true } }) }; });
 }
-
-// POST /api/time/watch — start or stop stopwatch
-export async function POST(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = watchActionSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  const { action, categoryId, comment } = parsed.data;
-  const now = new Date();
-  const timeNow = format(now, "HH:mm");
-  const today = new Date(
-    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
-  );
-
-  if (action === "START") {
-    // Check if a watch is already running
-    const existing = await db.timeRecord.findFirst({
-      where: {
-        userId: member.user.id,
-        type: "WATCH",
-        timeTo: null,
-      },
+export async function POST(request: Request) {
+  return api(async () => {
+    const m = await requireMember();
+    const data = await body(request, z.object({ action: z.enum(["START", "PAUSE", "RESUME", "STOP"]), categoryId: z.string().optional(), comment: z.string().max(1000).optional() }));
+    return serial(async tx => {
+      if (data.categoryId && !await tx.timeCategory.findFirst({ where: { id: data.categoryId, organizationId: m.organizationId, enabled: true } })) throw new ApiError("Kategorie nicht gefunden.");
+      const where = { organizationId: m.organizationId, userId: m.userId, type: "WATCH" as const, timeTo: null };
+      const running = await tx.timeRecord.findFirst({ where });
+      const now = new Date();
+      if (data.action === "START") {
+        if (running) throw new ApiError("Die Zeiterfassung läuft bereits.", 409);
+        return { record: await tx.timeRecord.create({ data: { organizationId: m.organizationId, userId: m.userId, type: "WATCH", date: new Date(berlinDate(now)), timeFrom: berlinTime(now), startedAt: now, categoryId: data.categoryId, comment: data.comment } }) };
+      }
+      if (!running) throw new ApiError("Keine laufende Zeiterfassung gefunden.", 404);
+      if (data.action === "PAUSE") {
+        if (running.pauseStartedAt) throw new ApiError("Die Pause läuft bereits.", 409);
+        return { record: await tx.timeRecord.update({ where: { id: running.id }, data: { pauseStartedAt: now } }) };
+      }
+      if (data.action === "RESUME" && !running.pauseStartedAt) throw new ApiError("Es läuft keine Pause.", 409);
+      const breakSeconds = running.breakSeconds + (running.pauseStartedAt ? Math.max(0, Math.round((now.getTime() - running.pauseStartedAt.getTime()) / 1000)) : 0);
+      // Beim Beenden steht der Zeitraum fest: Standort nach der Zuordnungsregel.
+      const branchId = data.action === "STOP" ? await branchForTime(tx, m.organizationId, m.userId, { date: running.date.toISOString().slice(0, 10), timeFrom: running.timeFrom, timeTo: berlinTime(now) }) : undefined;
+      return { record: await tx.timeRecord.update({ where: { id: running.id }, data: { breakSeconds, pauseStartedAt: null, ...(data.action === "STOP" ? { endedAt: now, timeTo: berlinTime(now), branchId, categoryId: data.categoryId || running.categoryId, comment: data.comment ?? running.comment } : {}) } }) };
     });
-    if (existing) {
-      return NextResponse.json(
-        { error: "A stopwatch is already running" },
-        { status: 409 }
-      );
-    }
-
-    const record = await db.timeRecord.create({
-      data: {
-        userId: member.user.id,
-        date: today,
-        type: "WATCH",
-        timeFrom: timeNow,
-        timeTo: null,
-        categoryId: categoryId || null,
-        comment: comment || null,
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-      },
-    });
-
-    // Broadcast real-time update
-    emitToOrg(member.organizationId, "time:watch", {
-      userId: member.user.id,
-      action: "started",
-      recordId: record.id,
-    });
-
-    return NextResponse.json({ record }, { status: 201 });
-  }
-
-  // action === "STOP"
-  const running = await db.timeRecord.findFirst({
-    where: {
-      userId: member.user.id,
-      type: "WATCH",
-      timeTo: null,
-    },
-    orderBy: { createdAt: "desc" },
   });
-
-  if (!running) {
-    return NextResponse.json(
-      { error: "No running stopwatch found" },
-      { status: 404 }
-    );
-  }
-
-  const updated = await db.timeRecord.update({
-    where: { id: running.id },
-    data: {
-      timeTo: timeNow,
-      categoryId: categoryId || running.categoryId,
-      comment: comment || running.comment,
-    },
-    include: {
-      category: { select: { id: true, name: true } },
-    },
-  });
-
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "time:watch", {
-    userId: member.user.id,
-    action: "stopped",
-    recordId: updated.id,
-  });
-
-  return NextResponse.json({ record: updated });
 }

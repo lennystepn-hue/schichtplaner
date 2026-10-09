@@ -1,6 +1,8 @@
 # Database Schema — Schichtplaner
 
-Full entity-relationship diagram of all 23 Prisma models.
+Entity-relationship diagram of the Prisma models (the NextAuth tables `Session` and `VerificationToken` are omitted).
+
+Access model: a weekly plan (`Schedule`) belongs to exactly one location (`Branch`), a location to one customer (`Customer`). Managers and employees reach locations only through `BranchAccess` (rights per location) and people only through `StaffAssignment` (rights per assigned person). OWNER and ADMIN have organisation-wide access. Plans without a location are legacy data and visible to admins only. Composite foreign keys and the trigger `akro_same_organization` keep all links inside one organisation.
 
 ```mermaid
 erDiagram
@@ -18,6 +20,7 @@ erDiagram
     User ||--o{ EmployeeNote : "authored"
 
     Organization ||--o{ OrganizationMember : "has"
+    Organization ||--o{ Customer : "has"
     Organization ||--o{ Branch : "has"
     Organization ||--o{ Division : "has"
     Organization ||--o{ Schedule : "has"
@@ -33,16 +36,28 @@ erDiagram
 
     OrganizationMember }o--|| Organization : "belongs to"
     OrganizationMember }o--|| User : "belongs to"
+    OrganizationMember ||--o{ BranchAccess : "granted"
+    OrganizationMember ||--o{ StaffAssignment : "manages"
+    OrganizationMember ||--o{ StaffAssignment : "assigned to"
+    OrganizationMember ||--o{ BranchIssue : "responsible for"
+    OrganizationMember ||--o{ Availability : "has"
+
+    Customer }o--|| Organization : "belongs to"
+    Customer ||--o{ Branch : "has"
 
     Branch }o--|| Organization : "belongs to"
+    Branch }o--o| Customer : "legacy rows may be unassigned"
     Branch ||--o{ Schedule : "has"
+    Branch ||--o{ BranchAccess : "grants"
+    Branch ||--o{ BranchIssue : "has"
+    Branch ||--o{ TimeRecord : "assigned"
 
     Division }o--|| Organization : "belongs to"
     Division ||--o{ DivisionMember : "has"
     Division ||--o{ Shift : "has"
 
     Schedule }o--|| Organization : "belongs to"
-    Schedule }o--o| Branch : "optional"
+    Schedule }o--o| Branch : "location (null = legacy)"
     Schedule ||--o{ Shift : "has"
     Schedule ||--o{ Briefing : "has"
     Schedule ||--o| LiveSession : "has"
@@ -56,6 +71,7 @@ erDiagram
     LiveSession ||--o{ LiveLog : "has"
 
     TimeRecord }o--o| TimeCategory : "optional"
+    TimeRecord ||--o{ TimeCorrection : "has"
     Absence }o--|| AbsenceCategory : "has"
 
     Message }o--o| Message : "reply to"
@@ -84,7 +100,6 @@ erDiagram
         string name
         string address
         enum nameFormat
-        enum scheduleVisibility
         datetime createdAt
         datetime deletedAt
     }
@@ -96,15 +111,59 @@ erDiagram
         enum role
         boolean isActive
         boolean isActivated
+        string position
+        string employmentType
         float targetHoursPerWeek
+        string_array qualifications
         string activationToken UK
+    }
+
+    Customer {
+        string id PK
+        string organizationId FK
+        string name
+        string notes
+        boolean isActive
     }
 
     Branch {
         string id PK
         string organizationId FK
+        string customerId FK
         string name
         string address
+        string meetingPoint
+        string notes
+        string_array positions
+        boolean isActive
+    }
+
+    BranchAccess {
+        string id PK
+        string organizationId FK
+        string memberId FK
+        string branchId FK
+        enum_array rights
+    }
+
+    StaffAssignment {
+        string id PK
+        string organizationId FK
+        string managerMemberId FK
+        string employeeMemberId FK
+        enum_array rights
+    }
+
+    BranchIssue {
+        string id PK
+        string organizationId FK
+        string branchId FK
+        string title
+        string description
+        enum status
+        string assigneeMemberId FK
+        string createdById FK
+        datetime resolvedAt
     }
 
     Division {
@@ -137,6 +196,7 @@ erDiagram
         int maxEmployees
         enum pauseOption
         int pauseValue
+        string_array requiredQualifications
     }
 
     Booking {
@@ -145,13 +205,16 @@ erDiagram
         string userId FK
         datetime bookedAt
         string bookedBy
+        datetime confirmedAt
     }
 
     ModRequest {
         string id PK
         string shiftId FK
         string userId FK
+        string kind
         enum state
+        string targetUserId
         string note
         datetime deadline
     }
@@ -192,6 +255,8 @@ erDiagram
     TimeRecord {
         string id PK
         string userId FK
+        string organizationId FK
+        string branchId FK
         date date
         string timeFrom
         string timeTo
@@ -200,6 +265,30 @@ erDiagram
         enum type
         string categoryId FK
         string comment
+        datetime startedAt
+        datetime endedAt
+        int breakSeconds
+    }
+
+    TimeCorrection {
+        string id PK
+        string organizationId FK
+        string recordId FK
+        string requesterId
+        string reason
+        json before
+        json proposed
+        enum status
+    }
+
+    Availability {
+        string id PK
+        string organizationId FK
+        string userId FK
+        date date
+        string timeFrom
+        string timeTo
+        boolean available
     }
 
     TimeCategory {
@@ -254,6 +343,7 @@ erDiagram
         string subject
         string body
         string parentId FK
+        string shiftId
     }
 
     MessageRecipient {

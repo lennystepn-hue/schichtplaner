@@ -2,26 +2,40 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isRegistrationOpen, passwordSchema } from "@/lib/security";
 
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: passwordSchema,
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   companyName: z.string().min(1),
 });
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  if (!(await isRegistrationOpen())) {
+    return NextResponse.json(
+      { error: "Registrierung ist deaktiviert. Bitte wende dich an deinen Administrator." },
+      { status: 403 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.flatten() },
+      { error: parsed.error.issues[0]?.message ?? "Ungueltige Eingabe" },
       { status: 400 }
     );
   }
 
-  const { email, password, firstName, lastName, companyName } = parsed.data;
+  const { password, firstName, lastName, companyName } = parsed.data;
+  const email = parsed.data.email.toLowerCase();
 
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {

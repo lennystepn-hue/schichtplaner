@@ -13,7 +13,7 @@ export function SkeletonPage() {
       </div>
 
       {/* Content area */}
-      <div className="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      <div className="akro-panel p-6">
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <Skeleton className="h-10 w-10 rounded-full" />
@@ -24,9 +24,9 @@ export function SkeletonPage() {
           </div>
           <Skeleton className="h-px w-full" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Skeleton className="h-24 rounded-lg" />
-            <Skeleton className="h-24 rounded-lg" />
-            <Skeleton className="h-24 rounded-lg" />
+            <Skeleton className="h-24 rounded-[var(--radius-panel)]" />
+            <Skeleton className="h-24 rounded-[var(--radius-panel)]" />
+            <Skeleton className="h-24 rounded-[var(--radius-panel)]" />
           </div>
           <div className="space-y-3">
             <Skeleton className="h-4 w-full" />
@@ -37,11 +37,11 @@ export function SkeletonPage() {
       </div>
 
       {/* Table-like skeleton */}
-      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+      <div className="akro-panel">
+        <div className="border-b p-4">
           <Skeleton className="h-4 w-32" />
         </div>
-        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+        <div className="divide-y">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-4">
               <Skeleton className="h-8 w-8 rounded-full" />

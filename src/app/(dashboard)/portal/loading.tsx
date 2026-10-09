@@ -10,7 +10,7 @@ export default function PortalLoading() {
       </div>
       <div className="flex-1 space-y-4">
         <Skeleton className="h-8 w-40" />
-        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+        <div className="divide-y divide-border rounded-lg border border-border bg-white dark:divide-border">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-4">
               <Skeleton className="h-8 w-8 rounded-full" />

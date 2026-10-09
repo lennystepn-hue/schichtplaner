@@ -1,152 +1,55 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { api, body, ApiError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { assertCan, can, requireAccess, type Access } from "@/lib/access";
 
-interface RouteContext {
-  params: Promise<{ id: string }>;
+type Context = { params: Promise<{ id: string }> };
+
+async function scheduleFor(a: Access, id: string) {
+  const schedule = await db.schedule.findFirst({ where: { id, organizationId: a.orgId, deletedAt: null } });
+  if (!schedule) throw new ApiError("Schichtplan nicht gefunden.", 404);
+  return schedule;
 }
 
 /**
- * Verify a schedule exists and belongs to the user's org.
+ * Lesen: die Planung des Standorts (auch Entwuerfe) oder - bei
+ * veroeffentlichten Plaenen - wer dort Schichten sehen darf oder eingeteilt ist.
  */
-async function getScheduleForMember(scheduleId: string, orgId: string) {
-  return db.schedule.findFirst({
-    where: {
-      id: scheduleId,
-      organizationId: orgId,
-      deletedAt: null,
-    },
+export async function GET(_request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const schedule = await scheduleFor(a, (await context.params).id);
+    const planner = can(a, "VIEW_SCHEDULE", schedule.branchId) && (a.isAdmin || a.role === "MANAGER");
+    const reader = schedule.isPublic && (can(a, "REQUEST_SHIFTS", schedule.branchId)
+      || !!await db.booking.findFirst({ where: { userId: a.userId, shift: { scheduleId: schedule.id, deletedAt: null } }, select: { id: true } }));
+    if (!planner && !reader) throw new ApiError("Schichtplan nicht gefunden.", 404);
+    const briefing = await db.briefing.findFirst({ where: { scheduleId: schedule.id }, orderBy: { updatedAt: "desc" } });
+    return { briefing: briefing ?? null };
   });
 }
 
-/**
- * GET /api/schedules/:id/briefing
- *
- * Get the briefing for a schedule. Returns the first (most recent) briefing.
- */
-export async function GET(_request: NextRequest, context: RouteContext) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+const briefingSchema = z.object({ text: z.string().min(1, "Text darf nicht leer sein").max(5000) });
 
-  const { id } = await context.params;
-
-  const schedule = await getScheduleForMember(id, member.organizationId);
-  if (!schedule) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  const briefing = await db.briefing.findFirst({
-    where: { scheduleId: id },
-    orderBy: { updatedAt: "desc" },
+export async function POST(request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const schedule = await scheduleFor(a, (await context.params).id);
+    assertCan(a, "EDIT_SHIFTS", schedule.branchId);
+    const { text } = await body(request, briefingSchema);
+    const existing = await db.briefing.findFirst({ where: { scheduleId: schedule.id }, orderBy: { updatedAt: "desc" } });
+    const briefing = existing
+      ? await db.briefing.update({ where: { id: existing.id }, data: { text } })
+      : await db.briefing.create({ data: { scheduleId: schedule.id, text } });
+    return { briefing };
   });
-
-  return NextResponse.json({ briefing: briefing ?? null });
 }
 
-const briefingSchema = z.object({
-  text: z.string().min(1, "Text darf nicht leer sein").max(5000),
-});
-
-/**
- * POST /api/schedules/:id/briefing
- *
- * Create or update the briefing for a schedule.
- * If a briefing already exists, it is updated. Otherwise a new one is created.
- * Manager+ only.
- */
-export async function POST(request: NextRequest, context: RouteContext) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { id } = await context.params;
-
-  const schedule = await getScheduleForMember(id, member.organizationId);
-  if (!schedule) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = briefingSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.issues },
-      { status: 400 }
-    );
-  }
-
-  // Upsert: find existing briefing or create new one
-  const existing = await db.briefing.findFirst({
-    where: { scheduleId: id },
+export async function DELETE(_request: Request, context: Context) {
+  return api(async () => {
+    const a = await requireAccess();
+    const schedule = await scheduleFor(a, (await context.params).id);
+    assertCan(a, "EDIT_SHIFTS", schedule.branchId);
+    await db.briefing.deleteMany({ where: { scheduleId: schedule.id } });
+    return { success: true };
   });
-
-  let briefing;
-  if (existing) {
-    briefing = await db.briefing.update({
-      where: { id: existing.id },
-      data: { text: parsed.data.text },
-    });
-  } else {
-    briefing = await db.briefing.create({
-      data: {
-        scheduleId: id,
-        text: parsed.data.text,
-      },
-    });
-  }
-
-  return NextResponse.json({ briefing }, { status: existing ? 200 : 201 });
-}
-
-/**
- * DELETE /api/schedules/:id/briefing
- *
- * Delete all briefings for a schedule.
- * Manager+ only.
- */
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { id } = await context.params;
-
-  const schedule = await getScheduleForMember(id, member.organizationId);
-  if (!schedule) {
-    return NextResponse.json(
-      { error: "Schichtplan nicht gefunden" },
-      { status: 404 }
-    );
-  }
-
-  await db.briefing.deleteMany({
-    where: { scheduleId: id },
-  });
-
-  return NextResponse.json({ success: true });
 }

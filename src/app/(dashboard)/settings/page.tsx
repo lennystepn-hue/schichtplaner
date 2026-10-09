@@ -23,7 +23,6 @@ type SettingsResponse = {
     name: string;
     address: string | null;
     nameFormat: string;
-    scheduleVisibility: string;
   };
   timeSettings: {
     whoCanUse: string;
@@ -163,7 +162,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Einstellungen</h1>
+        <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Einstellungen</h1>
         <p className="text-sm text-muted-foreground">
           Organisation und Systemeinstellungen verwalten
         </p>
@@ -201,7 +200,6 @@ export default function SettingsPage() {
           {activeSection === "schedule" && (
             <ScheduleSettings
               nameFormat={data.organization.nameFormat}
-              scheduleVisibility={data.organization.scheduleVisibility}
               onUpdate={handleUpdate}
               isSaving={updateMutation.isPending}
             />

@@ -222,21 +222,21 @@ export function AbsenceCalendar() {
                 </div>
               ))}
               <div className="flex items-center gap-2">
-                <span className="size-3 rounded-sm shrink-0 bg-gradient-to-r from-yellow-200 to-yellow-300 border border-yellow-400 border-dashed" />
+                <span className="size-3 rounded-sm shrink-0 bg-gradient-to-r from-yellow-200 to-yellow-300 border border-warn/40 border-dashed" />
                 <span className="text-sm text-muted-foreground">
                   Ausstehend (gestreift)
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="size-3 rounded-sm shrink-0 bg-rose-100 dark:bg-rose-900 border border-rose-300">
-                  <span className="block w-full h-px bg-rose-500 mt-1.5" />
+                <span className="size-3 rounded-sm shrink-0 bg-destructive/10 dark:bg-destructive/20 border border-destructive/40">
+                  <span className="block w-full h-px bg-destructive mt-1.5" />
                 </span>
                 <span className="text-sm text-muted-foreground">
                   Abgelehnt (durchgestrichen)
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="size-3 rounded-sm shrink-0 bg-blue-100 dark:bg-blue-900 border border-blue-300" />
+                <span className="size-3 rounded-sm shrink-0 bg-accent border border-blue-300" />
                 <span className="text-sm text-muted-foreground">Feiertag</span>
               </div>
             </div>
@@ -381,7 +381,7 @@ function DayCell({
         "hover:ring-1 hover:ring-primary/50",
         weekend && !absence && !holiday && "text-muted-foreground/50",
         today && "font-bold ring-1 ring-primary",
-        holiday && !absence && "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300",
+        holiday && !absence && "bg-accent text-[var(--brand)] dark:text-[var(--brand)]",
         borderStyle
       )}
       style={{

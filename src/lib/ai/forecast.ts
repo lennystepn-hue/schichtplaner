@@ -144,7 +144,6 @@ export async function generateForecast(
   const schedules = await db.schedule.findMany({
     where: {
       organizationId: orgId,
-      branchId: null,
       deletedAt: null,
       OR: weeks.map((w) => ({
         weekNumber: w.weekNumber,

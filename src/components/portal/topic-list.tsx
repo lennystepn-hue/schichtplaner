@@ -78,7 +78,7 @@ export function TopicList() {
     <div className="flex-1">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Themen</h1>
+        <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Themen</h1>
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="size-4" />
           Neues Thema
@@ -89,32 +89,32 @@ export function TopicList() {
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
+            <div key={i} className="h-16 animate-pulse rounded-md bg-muted" />
           ))}
         </div>
       ) : topics.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-slate-500">
-          <MessageCircle className="mb-3 size-10 text-slate-300" />
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-muted-foreground">
+          <MessageCircle className="mb-3 size-10 text-muted-foreground" />
           <p className="text-sm">Noch keine Themen vorhanden</p>
           <Button variant="outline" className="mt-4" onClick={() => setCreateOpen(true)}>
             Erstes Thema erstellen
           </Button>
         </div>
       ) : (
-        <div className="divide-y rounded-lg border bg-white dark:bg-slate-900 dark:border-slate-800">
+        <div className="divide-y akro-panel">
           {topics.map((topic) => (
             <div
               key={topic.id}
-              className="flex cursor-pointer items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+              className="flex cursor-pointer items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
               onClick={() => router.push(`/portal/topics/${topic.id}`)}
             >
-              <div className="flex size-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300">
+              <div className="flex size-10 items-center justify-center rounded-full bg-accent text-primary dark:text-primary">
                 <MessageCircle className="size-5" />
               </div>
 
               <div className="min-w-0 flex-1">
                 <h3 className="font-medium truncate">{topic.title}</h3>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
                   {topic.creator && (
                     <span className="flex items-center gap-1">
                       <User className="size-3" />
@@ -134,10 +134,10 @@ export function TopicList() {
                   {topic.postCount}
                 </Badge>
                 <div className="text-right">
-                  <div className="text-xs text-slate-400 dark:text-slate-500">
+                  <div className="text-xs text-muted-foreground">
                     Letzte Aktivitaet
                   </div>
-                  <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  <div className="text-xs font-medium text-muted-foreground">
                     {format(new Date(topic.lastActivity), "dd. MMM yyyy, HH:mm", { locale: de })}
                   </div>
                 </div>

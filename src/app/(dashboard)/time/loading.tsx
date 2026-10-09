@@ -12,8 +12,8 @@ export default function TimeLoading() {
         <Skeleton className="h-28 rounded-lg" />
         <Skeleton className="h-28 rounded-lg" />
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+      <div className="rounded-lg border border-border bg-white">
+        <div className="divide-y divide-border">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-4">
               <Skeleton className="h-4 w-20" />

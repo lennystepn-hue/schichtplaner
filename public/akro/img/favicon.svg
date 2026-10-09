@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AKRO">
+  <!--
+    Nachzeichnung des Schild-Elements aus dem AKRO-Logo (dem "O" der
+    Wortmarke) als eigenständiger Vektor. Bewusst neu gezeichnet und nicht
+    aus der eingebetteten Bitmap skaliert, damit das Symbol in 16 px
+    scharf bleibt.
+  -->
+  <defs>
+    <linearGradient id="akro-verlauf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2563eb" />
+      <stop offset="1" stop-color="#0ea5e9" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#akro-verlauf)" />
+  <path
+    fill="#ffffff"
+    d="M32 12.5 46 18v13.2c0 8.3-5.3 15.6-14 19.3-8.7-3.7-14-11-14-19.3V18z"
+  />
+  <path
+    fill="#0b1626"
+    d="M32 24.5a4.6 4.6 0 0 0-2.6 8.4l-1.5 6.6h8.2l-1.5-6.6A4.6 4.6 0 0 0 32 24.5z"
+  />
+</svg>

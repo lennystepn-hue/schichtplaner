@@ -151,7 +151,7 @@ export function FileBrowser() {
     <div className="flex-1">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dateien</h1>
+        <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Dateien</h1>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -176,8 +176,8 @@ export function FileBrowser() {
           className={cn(
             "flex items-center gap-1 rounded px-2 py-1 transition-colors",
             !currentFolderId
-              ? "font-medium text-indigo-600 dark:text-indigo-400"
-              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              ? "font-medium text-primary"
+              : "text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-muted-foreground"
           )}
         >
           <Home className="size-3.5" />
@@ -185,14 +185,14 @@ export function FileBrowser() {
         </button>
         {breadcrumb.map((item) => (
           <span key={item.id} className="flex items-center gap-1">
-            <ChevronRight className="size-3.5 text-slate-400" />
+            <ChevronRight className="size-3.5 text-muted-foreground" />
             <button
               onClick={() => setCurrentFolderId(item.id)}
               className={cn(
                 "rounded px-2 py-1 transition-colors",
                 currentFolderId === item.id
-                  ? "font-medium text-indigo-600 dark:text-indigo-400"
-                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                  ? "font-medium text-primary"
+                  : "text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-muted-foreground"
               )}
             >
               {item.name}
@@ -205,12 +205,12 @@ export function FileBrowser() {
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+            <div key={i} className="h-24 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
       ) : folders.length === 0 && files.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-slate-500">
-          <Folder className="mb-3 size-10 text-slate-300" />
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-muted-foreground">
+          <Folder className="mb-3 size-10 text-muted-foreground" />
           <p className="text-sm">Dieser Ordner ist leer</p>
         </div>
       ) : (
@@ -218,17 +218,17 @@ export function FileBrowser() {
           {/* Folders */}
           {folders.length > 0 && (
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Ordner
               </h3>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {folders.map((folder) => (
                   <div
                     key={folder.id}
-                    className="group relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border bg-white p-4 transition-all hover:border-indigo-300 hover:shadow-sm dark:bg-slate-900 dark:border-slate-800 dark:hover:border-indigo-700"
+                    className="group relative flex cursor-pointer flex-col items-center gap-2 akro-panel p-4 transition-all hover:border-primary/40 hover:shadow-sm"
                     onClick={() => setCurrentFolderId(folder.id)}
                   >
-                    <Folder className="size-10 text-indigo-500" />
+                    <Folder className="size-10 text-primary" />
                     <span className="text-sm font-medium text-center truncate w-full">
                       {folder.name}
                     </span>
@@ -258,7 +258,7 @@ export function FileBrowser() {
                             Umbenennen
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="text-red-600"
+                            className="text-destructive"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteMutation.mutate(folder.id);
@@ -279,19 +279,19 @@ export function FileBrowser() {
           {/* Files */}
           {files.length > 0 && (
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Dateien
               </h3>
-              <div className="divide-y rounded-lg border bg-white dark:bg-slate-900 dark:border-slate-800">
+              <div className="divide-y akro-panel">
                 {files.map((file) => (
                   <div
                     key={file.id}
                     className="group flex items-center gap-3 px-4 py-3"
                   >
-                    <FileText className="size-5 text-slate-400 shrink-0" />
+                    <FileText className="size-5 text-muted-foreground shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{file.name}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-muted-foreground">
                         {formatSize(file.size)} &middot;{" "}
                         {file.uploadedBy.firstName} {file.uploadedBy.lastName} &middot;{" "}
                         {format(new Date(file.createdAt), "dd. MMM yyyy", { locale: de })}
@@ -316,7 +316,7 @@ export function FileBrowser() {
                             Umbenennen
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="text-red-600"
+                            className="text-destructive"
                             onClick={() => deleteMutation.mutate(file.id)}
                           >
                             <Trash2 className="mr-2 size-4" />

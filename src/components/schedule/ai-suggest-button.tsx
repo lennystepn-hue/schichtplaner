@@ -41,9 +41,9 @@ interface AISuggestButtonProps {
 // ─── Score color helper ─────────────────────────────────────────────
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "bg-green-100 text-green-800 border-green-200";
-  if (score >= 60) return "bg-yellow-100 text-yellow-800 border-yellow-200";
-  return "bg-red-100 text-red-800 border-red-200";
+  if (score >= 80) return "bg-ok/10 text-ok border-ok/40";
+  if (score >= 60) return "bg-warn/10 text-warn border-warn/40";
+  return "bg-destructive/10 text-destructive border-destructive/40";
 }
 
 function scoreLabel(score: number): string {
@@ -216,7 +216,7 @@ export function AISuggestButton({ scheduleId }: AISuggestButtonProps) {
         <SheetContent side="right" className="flex flex-col sm:max-w-lg">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <Sparkles className="size-4 text-violet-500" />
+              <Sparkles className="size-4 text-[var(--brand)]" />
               KI-Vorschlaege
             </SheetTitle>
             <SheetDescription>
@@ -247,7 +247,7 @@ export function AISuggestButton({ scheduleId }: AISuggestButtonProps) {
                   key={key}
                   className={cn(
                     "rounded-lg border p-3 transition-all",
-                    isAccepted && "bg-green-50/50 border-green-200 opacity-75",
+                    isAccepted && "bg-ok/10/50 border-ok/40 opacity-75",
                     isDeclined && "bg-muted/50 opacity-50",
                     !isDone && "bg-card hover:shadow-sm"
                   )}
@@ -256,8 +256,8 @@ export function AISuggestButton({ scheduleId }: AISuggestButtonProps) {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 min-w-0">
                       {/* Avatar placeholder */}
-                      <div className="size-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-medium text-violet-700">
+                      <div className="size-8 rounded-full text-[var(--brand)] flex items-center justify-center shrink-0">
+                        <span className="text-xs font-medium text-[var(--brand)]">
                           {suggestion.employeeName
                             .split(" ")
                             .map((n) => n[0])
@@ -291,7 +291,7 @@ export function AISuggestButton({ scheduleId }: AISuggestButtonProps) {
 
                   {/* Status / Actions */}
                   {isAccepted ? (
-                    <div className="flex items-center gap-1.5 text-xs text-green-600">
+                    <div className="flex items-center gap-1.5 text-xs text-ok">
                       <Check className="size-3.5" />
                       Uebernommen
                     </div>

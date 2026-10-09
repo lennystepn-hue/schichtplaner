@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { isAIFeatureEnabled } from "@/lib/ai/client";
 import { detectAnomalies } from "@/lib/ai/anomaly-detector";
 
@@ -15,9 +15,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json(
-      { error: "Nur Manager koennen Anomalien einsehen" },
+      { error: "Nur die Administration kann Anomalien einsehen" },
       { status: 403 }
     );
   }

@@ -1,16 +1,16 @@
-version: '3.8'
+# Schichtplaner – lokales, datenschutzfreundliches Setup
+# Vor dem Start: .env.production.example nach .env kopieren und alle CHANGE_ME-Werte ersetzen.
+# Datenbank ist nur im internen Docker-Netz erreichbar (kein Port nach aussen).
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: schichtplaner
-      POSTGRES_PASSWORD: schichtplaner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein}
       POSTGRES_DB: schichtplaner
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U schichtplaner"]
       interval: 10s
@@ -18,36 +18,19 @@ services:
       retries: 5
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # Legt beim Start die Datenbanktabellen an bzw. aktualisiert sie, danach beendet es sich.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    command: ["npx", "prisma", "migrate", "deploy"]
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      DATABASE_URL: postgresql://schichtplaner:${POSTGRES_PASSWORD}@postgres:5432/schichtplaner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   app:
     build:
@@ -56,18 +39,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://schichtplaner:schichtplaner@postgres:5432/schichtplaner
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
+      DATABASE_URL: postgresql://schichtplaner:${POSTGRES_PASSWORD}@postgres:5432/schichtplaner
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET muss in .env gesetzt sein}
+      AUTH_TRUST_HOST: "true"
+      # Ohne eigene Adresse leitet die Anmeldung hinter dem Reverse Proxy auf
+      # die interne Bindeadresse um (https://0.0.0.0:3000), etwa beim Abmelden.
+      AUTH_URL: ${APP_URL:?APP_URL muss in .env gesetzt sein}
+      # Dienstplaene, Stempelzeiten und Auswertungen rechnen in Ortszeit.
+      TZ: Europe/Berlin
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -79,6 +67,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -90,7 +80,5 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
-  minio_data:
   caddy_data:
   caddy_config:

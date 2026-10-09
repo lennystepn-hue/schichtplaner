@@ -13,9 +13,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
+import { rollenName } from "./nav-config";
 
-export function UserMenu() {
+export function UserMenu({
+  collapsed = false,
+  dunkel = false,
+}: {
+  collapsed?: boolean;
+  /** Darstellung auf der dunklen Navigationsschiene. */
+  dunkel?: boolean;
+}) {
   const { data: member } = useCurrentMember();
   const { theme, setTheme } = useTheme();
 
@@ -27,7 +36,16 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-9 gap-2 px-2">
+        <Button
+          variant="ghost"
+          className={cn(
+            "h-11 w-full",
+            collapsed ? "justify-center px-0" : "justify-start gap-2.5 px-2",
+            dunkel &&
+              "text-[color:var(--schiene-text)] hover:bg-[var(--schiene-flaeche)] hover:text-[color:var(--schiene-text)]"
+          )}
+          aria-label="Benutzerkonto"
+        >
           <Avatar size="sm">
             {member?.user.profileImage && (
               <AvatarImage
@@ -35,13 +53,35 @@ export function UserMenu() {
                 alt={fullName}
               />
             )}
-            <AvatarFallback className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+            <AvatarFallback
+              className={
+                dunkel
+                  ? "bg-[var(--schiene-aktiv)] text-[color:var(--schiene-text)]"
+                  : "bg-secondary text-secondary-foreground"
+              }
+            >
               {initials || "?"}
             </AvatarFallback>
           </Avatar>
-          <span className="hidden text-sm font-medium lg:inline">
-            {fullName || "Laden..."}
-          </span>
+          {!collapsed && (
+            <span className="min-w-0 text-left">
+              <span className="block truncate text-[13px] leading-tight font-medium">
+                {fullName || "Laden ..."}
+              </span>
+              {member?.role && (
+                <span
+                  className={cn(
+                    "block truncate text-[11px] leading-tight font-normal",
+                    dunkel
+                      ? "text-[color:var(--schiene-gedimmt)]"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {rollenName(member.role)}
+                </span>
+              )}
+            </span>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

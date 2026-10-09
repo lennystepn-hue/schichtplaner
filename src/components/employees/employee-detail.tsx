@@ -46,7 +46,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCurrentMember } from "@/lib/hooks/use-current-member";
+import { Personnel } from "@/components/workforce/personnel";
+import { AccessEditor } from "./access-editor";
 
 type EmployeeDetail = {
   id: string;
@@ -63,6 +64,14 @@ type EmployeeDetail = {
     nickname: string | null;
     profileImage: string | null;
     createdAt: string;
+  };
+  /** Was die angemeldete Person hier darf - vom Server berechnet. */
+  permissions: {
+    editContact: boolean;
+    editPersonnel: boolean;
+    notes: boolean;
+    admin: boolean;
+    manageAccess: boolean;
   };
 };
 
@@ -99,11 +108,11 @@ function getRoleLabel(role: string) {
 function getRoleBadgeColor(role: string) {
   switch (role) {
     case "OWNER":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
+      return "bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn";
     case "ADMIN":
-      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
+      return "bg-accent text-primary";
     case "MANAGER":
-      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
+      return "bg-ok/10 text-ok dark:bg-ok/20 dark:text-ok";
     default:
       return "";
   }
@@ -154,7 +163,7 @@ function InlineEdit({
           variant="ghost"
           size="icon-xs"
           onClick={handleSave}
-          className="text-emerald-600"
+          className="text-ok"
         >
           <Check className="size-3" />
         </Button>
@@ -191,14 +200,8 @@ function InlineEdit({
 export function EmployeeDetail({ memberId }: { memberId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: currentMember } = useCurrentMember();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
-
-  const isAdmin =
-    currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
-  const isManagerPlus =
-    isAdmin || currentMember?.role === "MANAGER";
 
   // Fetch employee detail
   const {
@@ -222,7 +225,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: isManagerPlus,
+    enabled: !!employee?.permissions.notes,
   });
 
   // Update employee mutation
@@ -266,6 +269,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
     onSuccess: () => {
       toast.success("Rolle geaendert");
       queryClient.invalidateQueries({ queryKey: ["employee", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["access", memberId] });
       queryClient.invalidateQueries({ queryKey: ["employees"] });
     },
     onError: (err: Error) => {
@@ -339,10 +343,9 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
     );
   }
 
-  const isSelf = employee.user.id === currentMember?.user?.id;
-  const canEdit = isAdmin || isSelf;
-  const canChangeRole = isAdmin && !isSelf && employee.role !== "OWNER";
-  const canDelete = isAdmin && !isSelf && employee.role !== "OWNER";
+  const canEdit = employee.permissions.editContact;
+  const canChangeRole = employee.permissions.admin;
+  const canDelete = employee.permissions.admin;
 
   return (
     <div className="space-y-6">
@@ -364,7 +367,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
             </AvatarFallback>
           </Avatar>
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">
               {employee.user.lastName}, {employee.user.firstName}
             </h1>
             <div className="flex items-center gap-2 mt-1">
@@ -377,7 +380,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
               {employee.isActive && !employee.isActivated && (
                 <Badge
                   variant="outline"
-                  className="border-amber-500 text-amber-600"
+                  className="border-warn/40 text-warn"
                 >
                   Nicht freigeschaltet
                 </Badge>
@@ -535,7 +538,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
           </Card>
 
           {/* Notes Section */}
-          {isManagerPlus && (
+          {employee.permissions.notes && (
             <Card className="p-5 space-y-4">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide">
                 <StickyNote className="inline size-3.5 mr-1" />
@@ -647,7 +650,7 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Member-ID</span>
-                <span className="font-mono text-xs text-muted-foreground">
+                <span className="tabular text-xs text-muted-foreground">
                   {employee.id}
                 </span>
               </div>
@@ -656,6 +659,8 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
         </div>
       </div>
 
+      <Personnel id={employee.id} />
+      {employee.permissions.manageAccess && <AccessEditor memberId={employee.id} />}
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>

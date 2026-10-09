@@ -68,11 +68,11 @@ export default function AiInsightsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900">
-            <BarChart3 className="size-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-accent">
+            <BarChart3 className="size-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">KI-Insights & Prognose</h1>
+            <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">KI-Insights & Prognose</h1>
             <p className="text-sm text-muted-foreground">
               Stunden-Trends und Prognosen basierend auf historischen Daten
             </p>
@@ -105,7 +105,7 @@ export default function AiInsightsPage() {
       {isLoading && (
         <div className="flex items-center justify-center py-20">
           <div className="text-center space-y-3">
-            <Loader2 className="mx-auto size-8 animate-spin text-indigo-500" />
+            <Loader2 className="mx-auto size-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
               Prognose wird berechnet...
             </p>
@@ -115,8 +115,8 @@ export default function AiInsightsPage() {
 
       {/* Error state */}
       {error && !isLoading && (
-        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-6 text-center">
-          <p className="text-sm text-red-600 dark:text-red-400">
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 dark:bg-destructive/20 dark:border-destructive/40 p-6 text-center">
+          <p className="text-sm text-destructive dark:text-destructive">
             {error instanceof Error ? error.message : "Fehler beim Laden"}
           </p>
           <Button
@@ -180,7 +180,7 @@ export default function AiInsightsPage() {
           </div>
 
           {/* Forecast chart */}
-          <div className="rounded-xl border bg-white dark:bg-slate-900 p-6">
+          <div className="akro-panel p-6">
             <h2 className="text-lg font-semibold mb-4">
               Stunden-Verlauf & Prognose
             </h2>
@@ -191,14 +191,14 @@ export default function AiInsightsPage() {
           </div>
 
           {/* Weekly breakdown table */}
-          <div className="rounded-xl border bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="akro-panel overflow-hidden">
             <div className="px-6 py-4 border-b">
               <h2 className="text-lg font-semibold">Wochen-Details</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-slate-50 dark:bg-slate-800/50">
+                  <tr className="border-b bg-muted/50">
                     <th className="text-left px-4 py-2 font-medium">Woche</th>
                     <th className="text-right px-4 py-2 font-medium">
                       Stunden
@@ -229,27 +229,27 @@ export default function AiInsightsPage() {
                         key={idx}
                         className={cn(
                           "border-b last:border-0",
-                          dp.isForecast && "bg-amber-50/50 dark:bg-amber-950/20"
+                          dp.isForecast && "bg-warn/10/50 dark:bg-warn/20"
                         )}
                       >
                         <td className="px-4 py-2">
                           <span className="font-medium">{dp.label}</span>
                           {dp.isForecast && (
-                            <span className="ml-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            <span className="ml-1.5 text-[10px] text-warn dark:text-warn font-medium">
                               PROGNOSE
                             </span>
                           )}
                         </td>
-                        <td className="text-right px-4 py-2 font-mono">
+                        <td className="text-right px-4 py-2 tabular">
                           {hours.toFixed(1)}h
                         </td>
-                        <td className="text-right px-4 py-2 font-mono">
+                        <td className="text-right px-4 py-2 tabular">
                           {dp.isForecast ? "-" : dp.shiftCount}
                         </td>
-                        <td className="text-right px-4 py-2 font-mono">
+                        <td className="text-right px-4 py-2 tabular">
                           {dp.isForecast ? "-" : dp.employeeCount}
                         </td>
-                        <td className="text-right px-4 py-2 font-mono">
+                        <td className="text-right px-4 py-2 tabular">
                           {dp.isForecast ? "-" : avgPerEmployee}
                         </td>
                       </tr>
@@ -281,22 +281,22 @@ function MetricCard({
   variant?: "success" | "danger" | "neutral";
 }) {
   return (
-    <div className="rounded-xl border bg-white dark:bg-slate-900 p-4">
+    <div className="akro-panel p-4">
       <div className="flex items-center gap-2 mb-2">
         <div
           className={cn(
             "flex size-8 items-center justify-center rounded-lg",
-            variant === "success" && "bg-green-100 dark:bg-green-900",
-            variant === "danger" && "bg-red-100 dark:bg-red-900",
-            variant === "neutral" && "bg-slate-100 dark:bg-slate-800"
+            variant === "success" && "bg-ok/10 dark:bg-ok/20",
+            variant === "danger" && "bg-destructive/10 dark:bg-destructive/20",
+            variant === "neutral" && "bg-muted"
           )}
         >
           <Icon
             className={cn(
               "size-4",
-              variant === "success" && "text-green-600 dark:text-green-400",
-              variant === "danger" && "text-red-600 dark:text-red-400",
-              variant === "neutral" && "text-slate-600 dark:text-slate-400"
+              variant === "success" && "text-ok dark:text-ok",
+              variant === "danger" && "text-destructive dark:text-destructive",
+              variant === "neutral" && "text-muted-foreground"
             )}
           />
         </div>

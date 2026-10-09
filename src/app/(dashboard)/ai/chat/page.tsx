@@ -148,11 +148,11 @@ export default function AiChatPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900">
-            <Sparkles className="size-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-accent">
+            <Sparkles className="size-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">KI-Assistent</h1>
+            <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">KI-Assistent</h1>
             <p className="text-sm text-muted-foreground">
               Frag mich alles rund um deinen Schichtplan
             </p>
@@ -180,12 +180,12 @@ export default function AiChatPage() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col rounded-xl border bg-white dark:bg-slate-900 overflow-hidden">
+      <div className="flex-1 flex flex-col akro-panel overflow-hidden">
         {/* Messages */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <Sparkles className="size-12 text-indigo-200 dark:text-indigo-800 mb-4" />
+              <Sparkles className="size-12 text-primary mb-4" />
               <h2 className="text-lg font-semibold mb-2">
                 Wie kann ich dir helfen?
               </h2>
@@ -201,7 +201,7 @@ export default function AiChatPage() {
                   <button
                     key={idx}
                     onClick={() => handleSuggestion(s)}
-                    className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-foreground transition-colors"
+                    className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   >
                     {s}
                   </button>
@@ -223,8 +223,8 @@ export default function AiChatPage() {
               onKeyDown={handleKeyDown}
               placeholder="Nachricht eingeben... (Enter zum Senden, Shift+Enter fuer Zeilenumbruch)"
               className={cn(
-                "flex-1 resize-none rounded-xl border bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm",
-                "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500",
+                "flex-1 resize-none rounded-xl border bg-muted px-4 py-3 text-sm",
+                "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
                 "min-h-[44px] max-h-[120px]"
               )}
               rows={1}

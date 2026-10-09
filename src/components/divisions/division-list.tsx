@@ -140,7 +140,7 @@ export function DivisionList() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Arbeitsbereiche</h1>
+          <h1 className="text-[22px] leading-none font-[560] tracking-[-0.03em]">Arbeitsbereiche</h1>
           <p className="text-sm text-muted-foreground">
             Organisiere dein Team in Arbeitsbereiche
           </p>

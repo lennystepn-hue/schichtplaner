@@ -195,7 +195,7 @@ export function useSocket() {
 export function useSocketEvent(event: string, handler: (data: unknown) => void) {
   const { subscribe } = useSocket();
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  useEffect(() => { handlerRef.current = handler; }, [handler]);
 
   useEffect(() => {
     const unsubscribe = subscribe(event, (data: unknown) => {

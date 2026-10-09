@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { generateScheduleSuggestion } from "@/lib/ai/auto-planner";
 import { isAIFeatureEnabled, AIError } from "@/lib/ai/client";
 import { emitToSchedule } from "@/lib/emit";
@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isManagerOrAbove(member.role)) {
+  if (!isAdminOrAbove(member.role)) {
     return NextResponse.json(
-      { error: "Nur Manager koennen KI-Vorschlaege anfordern" },
+      { error: "Nur die Administration kann KI-Vorschlaege anfordern" },
       { status: 403 }
     );
   }
@@ -105,12 +105,8 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // Emit socket event so other clients can see suggestions
-    emitToSchedule(scheduleId, "ai:result", {
-      type: "schedule-suggestions",
-      scheduleId,
-      count: enrichedSuggestions.length,
-    });
+    // Nur ein Signal an Verbindungen, die den Plan sehen duerfen - ohne Inhalte.
+    emitToSchedule(scheduleId, "ai:result");
 
     return NextResponse.json({ suggestions: enrichedSuggestions });
   } catch (error) {

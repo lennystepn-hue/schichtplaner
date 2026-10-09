@@ -57,7 +57,7 @@ function CustomTooltip({
   const isForecast = rawData?.isForecast;
 
   return (
-    <div className="rounded-lg border bg-white dark:bg-slate-900 p-3 shadow-lg text-sm">
+    <div className="akro-panel p-3 text-sm">
       <p className="font-semibold mb-1">
         {label} {isForecast && "(Prognose)"}
       </p>
@@ -222,11 +222,11 @@ export function ForecastChart({ dataPoints, summary }: ForecastChartProps) {
 
       {/* AI Summary */}
       {summary && (
-        <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 p-4">
-          <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 mb-1">
+        <div className="rounded-lg bg-accent/50 border border-primary/30 p-4">
+          <p className="text-xs font-medium text-primary mb-1">
             KI-Analyse
           </p>
-          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+          <p className="text-sm text-foreground whitespace-pre-wrap">
             {summary}
           </p>
         </div>

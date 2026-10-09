@@ -75,17 +75,17 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  OWNER: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  ADMIN: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  MANAGER: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  EMPLOYEE: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+  OWNER: "bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn",
+  ADMIN: "bg-accent text-accent-foreground",
+  MANAGER: "bg-accent text-accent-foreground",
+  EMPLOYEE: "bg-muted text-muted-foreground",
 };
 
 /** Get the CSS classes for a score badge based on value. */
 function getScoreColor(score: number): string {
-  if (score >= 80) return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-  if (score >= 50) return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
-  return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+  if (score >= 80) return "bg-ok/10 text-ok dark:bg-ok/20 dark:text-ok";
+  if (score >= 50) return "bg-warn/10 text-warn dark:bg-warn/20 dark:text-warn";
+  return "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive";
 }
 
 /** Format score breakdown for tooltip display. */
@@ -108,9 +108,9 @@ export function EmployeePicker({
 
   // Fetch all active org employees
   const { data } = useQuery<{ members: OrgEmployee[] }>({
-    queryKey: ["employees", "active"],
+    queryKey: ["employees", "active", shiftId],
     queryFn: async () => {
-      const res = await fetch("/api/employees?status=active");
+      const res = await fetch(shiftId ? "/api/shifts/" + shiftId + "/candidates" : "/api/employees?status=active");
       if (!res.ok) throw new Error("Fehler beim Laden der Mitarbeiter");
       return res.json();
     },
@@ -194,7 +194,7 @@ export function EmployeePicker({
                       {emp.user.firstName} {emp.user.lastName}
                     </span>
                     {isBooked ? (
-                      <Check className="size-3.5 text-green-600" />
+                      <Check className="size-3.5 text-ok" />
                     ) : scoreData ? (
                       <TooltipProvider>
                         <Tooltip>

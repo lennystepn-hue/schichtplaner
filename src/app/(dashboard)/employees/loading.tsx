@@ -7,11 +7,11 @@ export default function EmployeesLoading() {
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-10 w-44" />
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+      <div className="rounded-lg border border-border bg-white">
+        <div className="border-b border-border p-4">
           <Skeleton className="h-10 w-64" />
         </div>
-        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+        <div className="divide-y divide-border">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 p-4">
               <Skeleton className="h-10 w-10 rounded-full" />

@@ -7,6 +7,9 @@
  */
 
 import { db } from "@/lib/db";
+import { serial } from "@/lib/api";
+import { assign } from "@/lib/planning";
+import { accessFor } from "@/lib/access";
 
 // ─── Tool Definitions ──────────────────────────────────────────────
 
@@ -107,8 +110,12 @@ export const chatTools: ChatTool[] = [
           type: "number",
           description: "Maximale Anzahl Mitarbeiter (Standard: 1)",
         },
+        branchId: {
+          type: "string",
+          description: "ID des Standorts, an dem die Schicht stattfindet",
+        },
       },
-      required: ["weekNumber", "year", "dayOfWeek", "shiftFrom", "shiftTo"],
+      required: ["weekNumber", "year", "dayOfWeek", "shiftFrom", "shiftTo", "branchId"],
     },
     requiresConfirmation: true,
   },
@@ -206,6 +213,8 @@ export async function executeTool(
   orgId: string,
   userId: string
 ): Promise<ToolResult> {
+  const actor = await db.organizationMember.findFirst({ where: { organizationId: orgId, userId, isActive: true, isActivated: true, role: { in: ["OWNER", "ADMIN"] }, organization: { deletedAt: null } } });
+  if (!actor) return { content: "Keine Berechtigung. Bitte nutze die freigegebenen Mitarbeiteransichten." };
   switch (toolName) {
     case "getSchedule":
       return executeGetSchedule(input, orgId);
@@ -233,15 +242,16 @@ async function executeGetSchedule(
   const weekNumber = input.weekNumber as number;
   const year = input.year as number;
 
-  const schedule = await db.schedule.findFirst({
+  // Seit der Trennung nach Standort gibt es je Standort einen Wochenplan.
+  const schedules = await db.schedule.findMany({
     where: {
       organizationId: orgId,
       weekNumber,
       year,
-      branchId: null,
       deletedAt: null,
     },
     include: {
+      branch: { select: { name: true } },
       shifts: {
         where: { deletedAt: null },
         include: {
@@ -259,31 +269,31 @@ async function executeGetSchedule(
     },
   });
 
-  if (!schedule) {
+  if (!schedules.length) {
     return {
       content: `Kein Schichtplan fuer KW ${weekNumber}/${year} gefunden.`,
     };
   }
 
-  const lines: string[] = [
-    `Schichtplan KW ${weekNumber}/${year} (${schedule.isPublic ? "veroeffentlicht" : "nicht veroeffentlicht"}):`,
-    "",
-  ];
+  const lines: string[] = [`Schichtplaene KW ${weekNumber}/${year}:`, ""];
 
-  for (const shift of schedule.shifts) {
-    const day = DAY_NAMES[shift.dayOfWeek] ?? `Tag ${shift.dayOfWeek}`;
-    const bookedNames = shift.bookings
-      .map((b) => `${b.user.firstName} ${b.user.lastName}`)
-      .join(", ");
-    const division = shift.division ? ` [${shift.division.title}]` : "";
-    const spots = `${shift.bookings.length}/${shift.maxEmployees}`;
+  for (const schedule of schedules) {
+    lines.push(`${schedule.branch?.name ?? "Ohne Standort"} (${schedule.isPublic ? "veroeffentlicht" : "nicht veroeffentlicht"}):`);
+    for (const shift of schedule.shifts) {
+      const day = DAY_NAMES[shift.dayOfWeek] ?? `Tag ${shift.dayOfWeek}`;
+      const bookedNames = shift.bookings
+        .map((b) => `${b.user.firstName} ${b.user.lastName}`)
+        .join(", ");
+      const division = shift.division ? ` [${shift.division.title}]` : "";
+      const spots = `${shift.bookings.length}/${shift.maxEmployees}`;
 
-    lines.push(
-      `- ${day} ${shift.shiftFrom}-${shift.shiftTo}${division} (${spots} belegt)${bookedNames ? `: ${bookedNames}` : ""} [ID: ${shift.id}]`
-    );
+      lines.push(
+        `- ${day} ${shift.shiftFrom}-${shift.shiftTo}${division} (${spots} belegt)${bookedNames ? `: ${bookedNames}` : ""} [ID: ${shift.id}]`
+      );
+    }
   }
 
-  return { content: lines.join("\n"), data: schedule };
+  return { content: lines.join("\n"), data: schedules };
 }
 
 async function executeGetEmployeeHours(
@@ -434,14 +444,23 @@ async function executeCreateShift(
   const shiftFrom = input.shiftFrom as string;
   const shiftTo = input.shiftTo as string;
   const maxEmployees = (input.maxEmployees as number) ?? 1;
+  const branchId = input.branchId as string | undefined;
 
-  // Find or create schedule
+  // Jede Schicht gehoert zu einem Standort mit Kunde.
+  const branch = branchId
+    ? await db.branch.findFirst({ where: { id: branchId, organizationId: orgId, isActive: true, customerId: { not: null } } })
+    : null;
+  if (!branch) {
+    return { content: "Bitte einen aktiven Standort mit zugeordnetem Kunden angeben (branchId)." };
+  }
+
+  // Wochenplan des Standorts finden oder anlegen
   let schedule = await db.schedule.findFirst({
     where: {
       organizationId: orgId,
       weekNumber,
       year,
-      branchId: null,
+      branchId: branch.id,
       deletedAt: null,
     },
   });
@@ -450,6 +469,7 @@ async function executeCreateShift(
     schedule = await db.schedule.create({
       data: {
         organizationId: orgId,
+        branchId: branch.id,
         weekNumber,
         year,
       },
@@ -521,14 +541,20 @@ async function executeBookEmployee(
     return { content: "Mitarbeiter nicht gefunden." };
   }
 
-  // Create booking
-  await db.booking.create({
-    data: {
-      shiftId,
-      userId: employeeId,
-      bookedBy: userId,
-    },
+  // Create booking - mit den Rechten der handelnden Person
+  const actor = await db.organizationMember.findFirst({
+    where: { organizationId: orgId, userId, isActive: true, isActivated: true },
+    include: { organization: true, user: true },
   });
+  if (!actor) {
+    return { content: "Keine Berechtigung." };
+  }
+  try {
+    const access = await accessFor(actor);
+    await serial(tx => assign(tx, access, shiftId, employeeId));
+  } catch (error) {
+    return { content: error instanceof Error ? error.message : "Zuweisung nicht möglich." };
+  }
 
   const day = DAY_NAMES[shift.dayOfWeek] ?? `Tag ${shift.dayOfWeek}`;
   const name = `${member.user.firstName} ${member.user.lastName}`;

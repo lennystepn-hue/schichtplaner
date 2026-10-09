@@ -62,9 +62,9 @@ function timesOverlap(
   bFrom: string,
   bTo: string
 ): boolean {
-  let aStart = toMinutes(aFrom);
+  const aStart = toMinutes(aFrom);
   let aEnd = toMinutes(aTo);
-  let bStart = toMinutes(bFrom);
+  const bStart = toMinutes(bFrom);
   let bEnd = toMinutes(bTo);
 
   if (aEnd <= aStart) aEnd += 24 * 60;

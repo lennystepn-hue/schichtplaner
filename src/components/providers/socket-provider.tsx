@@ -27,6 +27,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       subscribe("schedule:updated", () => {
         queryClient.invalidateQueries({ queryKey: ["schedule"] });
         queryClient.invalidateQueries({ queryKey: ["shifts"] });
+        queryClient.invalidateQueries({ queryKey: ["branch-month"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       })
     );
 
@@ -35,6 +37,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["schedule"] });
         queryClient.invalidateQueries({ queryKey: ["shifts"] });
         queryClient.invalidateQueries({ queryKey: ["bookings"] });
+        queryClient.invalidateQueries({ queryKey: ["branch-month"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        queryClient.invalidateQueries({ queryKey: ["requests"] });
+        queryClient.invalidateQueries({ queryKey: ["mod-requests"] });
       })
     );
 

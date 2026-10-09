@@ -9,6 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "./rate-limiter";
+import { isAIAllowedByServer } from "@/lib/security";
 
 // ─── Error types ────────────────────────────────────────────────────
 
@@ -35,6 +36,9 @@ const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 let _client: Anthropic | null = null;
 
 function getClient(): Anthropic {
+  if (!isAIAllowedByServer()) {
+    throw new AIError("KI-Funktionen sind auf diesem Server deaktiviert", "AI_DISABLED");
+  }
   if (_client) return _client;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -73,18 +77,21 @@ const featureToColumn: Record<AIFeature, string> = {
  *   1. aiEnabled is true (global toggle), AND
  *   2. The specific feature flag is true.
  *
- * If no OrgSettings row exists yet, defaults to enabled.
+ * Always `false` unless the server sets AI_ENABLED=true.
+ * If no OrgSettings row exists yet, defaults to disabled.
  */
 export async function isAIFeatureEnabled(
   orgId: string,
   feature: AIFeature
 ): Promise<boolean> {
+  if (!isAIAllowedByServer()) return false;
+
   const settings = await db.orgSettings.findUnique({
     where: { organizationId: orgId },
   });
 
-  // No settings row -> defaults are all true
-  if (!settings) return true;
+  // No settings row -> AI stays off (opt-in only)
+  if (!settings) return false;
 
   // Global kill switch
   if (!settings.aiEnabled) return false;
